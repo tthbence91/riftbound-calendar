@@ -203,7 +203,7 @@ Blazor WASM → EventApiClient.GetEventsAsync()
 > **Releasable**: minden task után a unit tesztek futtathatók; a Phase végén a fetcher + szűrő önállóan tesztelhető.
 
 #### Task 2.1 — RiftboundEvent domain entitás
-- [ ] **File**: `RiftboundCalendar.Core/Entities/RiftboundEvent.cs`
+- [x] **File**: `RiftboundCalendar.Core/Entities/RiftboundEvent.cs`
 - **Depends on**: Task 1.1
 - **Description**:
   - `public sealed record RiftboundEvent(string Id, string Title, DateTimeOffset StartDate, DateTimeOffset EndDate, string LocationName, double Latitude, double Longitude, string Format, Uri Url)`
