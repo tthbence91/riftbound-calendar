@@ -14,6 +14,9 @@ public sealed class EventCacheRepository : IEventRepository
         _cache = cache;
     }
 
+    public bool HasEvents => _cache.TryGetValue(CacheKey, out IReadOnlyList<RiftboundEvent>? events)
+                            && events is { Count: > 0 };
+
     public Task<IReadOnlyList<RiftboundEvent>> GetEventsAsync(CancellationToken cancellationToken = default)
     {
         var events = _cache.Get<IReadOnlyList<RiftboundEvent>>(CacheKey)

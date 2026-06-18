@@ -27,8 +27,13 @@ public sealed class EventRefreshBackgroundService : BackgroundService
         _logger = logger;
     }
 
+    private static readonly TimeSpan StartupRetryDelay = TimeSpan.FromSeconds(45);
+    private const int MaxStartupRetries = 4;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var startupRetries = 0;
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -39,7 +44,26 @@ public sealed class EventRefreshBackgroundService : BackgroundService
                     _options.BudapestLatitude,
                     _options.BudapestLongitude,
                     _options.RadiusKm);
-                _cache.UpdateCache(filtered);
+
+                if (filtered.Count > 0)
+                {
+                    _cache.UpdateCache(filtered);
+                    startupRetries = 0;
+                }
+                else if (!_cache.HasEvents && startupRetries < MaxStartupRetries)
+                {
+                    startupRetries++;
+                    _logger.LogWarning(
+                        "No events found, retrying in {Delay}s (attempt {Retry}/{Max})",
+                        StartupRetryDelay.TotalSeconds, startupRetries, MaxStartupRetries);
+                    await Task.Delay(StartupRetryDelay, stoppingToken)
+                        .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                    continue;
+                }
+                else
+                {
+                    _logger.LogWarning("No events found — keeping cached data");
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
