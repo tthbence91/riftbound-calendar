@@ -1,0 +1,34 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "codescene",
+            "tool": "code_health_review",
+            "input": {},
+            "if": "Bash(git commit *)",
+            "statusMessage": "CodeScene: Code Health ellenőrzés...",
+            "timeout": 60
+          }
+        ]
+      },
+      {
+        "matcher": "PowerShell",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "codescene",
+            "tool": "code_health_review",
+            "input": {},
+            "if": "PowerShell(git commit *)",
+            "statusMessage": "CodeScene: Code Health ellenőrzés...",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}
