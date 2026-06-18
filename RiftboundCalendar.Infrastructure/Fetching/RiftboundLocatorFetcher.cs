@@ -10,15 +10,14 @@ namespace RiftboundCalendar.Infrastructure.Fetching;
 
 public sealed class RiftboundLocatorFetcher : IEventFetcher
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private const string PushStart = "self.__next_f.push([1,\"";
     private const string PushEnd = "\\n\"";
     private const string PageSizeMarker = "page_size";
     private const int MaxChunkIdLength = 10;
+    private const int MaxLocalEventCount = 500;
+    private const string BackendApiBaseUrl = "https://api.riftbound.uvsgames.com/api/magic-events/";
 
     private readonly HttpClient _httpClient;
     private readonly RiftboundOptions _options;
@@ -40,22 +39,25 @@ public sealed class RiftboundLocatorFetcher : IEventFetcher
         try
         {
             var html = await _httpClient.GetStringAsync(_options.BaseUrl, cancellationToken);
-            var firstPage = ExtractFromPage(html);
-            if (firstPage is null || firstPage.Results.Count == 0) return [];
+            var eventIds = ExtractEventIds(html);
 
-            var allDtos = new List<EventDto>(firstPage.Results);
-            var nextUrl = firstPage.Next;
-
-            while (nextUrl is not null && !cancellationToken.IsCancellationRequested)
+            if (eventIds.Count == 0)
             {
-                var json = await _httpClient.GetStringAsync(nextUrl, cancellationToken);
-                var page = JsonSerializer.Deserialize<PaginatedResponseDto>(json, JsonOptions);
-                if (page is null) break;
-                allDtos.AddRange(page.Results);
-                nextUrl = page.Next;
+                _logger.LogWarning("No event IDs found in locator RSC data");
+                return [];
             }
 
-            return [.. allDtos.Select(MapToEvent)];
+            _logger.LogInformation("Found {Count} event IDs from locator", eventIds.Count);
+
+            var events = new List<RiftboundEvent>(eventIds.Count);
+            foreach (var id in eventIds)
+            {
+                var evt = await FetchEventByIdAsync(id, cancellationToken);
+                if (evt is not null) events.Add(evt);
+            }
+
+            _logger.LogInformation("Fetched {Count} full events from backend API", events.Count);
+            return events;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -64,9 +66,12 @@ public sealed class RiftboundLocatorFetcher : IEventFetcher
         }
     }
 
-    private static PaginatedResponseDto? ExtractFromPage(string html)
+    private static IReadOnlyList<int> ExtractEventIds(string html)
     {
+        List<int>? bestIds = null;
+        var bestCount = 0;
         var pos = 0;
+
         while (pos < html.Length)
         {
             var start = html.IndexOf(PushStart, pos, StringComparison.Ordinal);
@@ -77,76 +82,102 @@ public sealed class RiftboundLocatorFetcher : IEventFetcher
             if (end < 0) { pos = contentStart; continue; }
 
             var escaped = html[contentStart..end];
-            if (!escaped.Contains(PageSizeMarker, StringComparison.Ordinal))
+            if (escaped.Contains(PageSizeMarker, StringComparison.Ordinal))
             {
-                pos = end + PushEnd.Length;
-                continue;
+                var unescaped = UnescapeJsString(escaped);
+                if (unescaped is not null)
+                    CollectBestChunk(unescaped, ref bestIds, ref bestCount);
             }
-
-            var unescaped = UnescapeJsString(escaped);
-            if (unescaped is null) { pos = end + PushEnd.Length; continue; }
-
-            var colonIdx = unescaped.IndexOf(':');
-            if (colonIdx < 0 || colonIdx > MaxChunkIdLength)
-            {
-                pos = end + PushEnd.Length;
-                continue;
-            }
-
-            var json = unescaped[(colonIdx + 1)..];
-            try
-            {
-                var result = JsonSerializer.Deserialize<PaginatedResponseDto>(json, JsonOptions);
-                if (result is not null) return result;
-            }
-            catch (JsonException) { }
 
             pos = end + PushEnd.Length;
         }
-        return null;
+
+        return bestIds ?? [];
     }
 
-    private static string? UnescapeJsString(string escaped)
+    private static void CollectBestChunk(string content, ref List<int>? bestIds, ref int bestCount)
+    {
+        foreach (var line in content.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!line.Contains(PageSizeMarker, StringComparison.Ordinal)) continue;
+
+            var colonIdx = line.IndexOf(':');
+            if (colonIdx < 0 || colonIdx > MaxChunkIdLength) continue;
+
+            var json = line[(colonIdx + 1)..];
+            if (!json.StartsWith('{')) continue;
+
+            try
+            {
+                var page = JsonSerializer.Deserialize<LocalEventPageDto>(json, JsonOptions);
+                if (page?.Results is { Count: > 0 } && page.Count is > 0 and <= MaxLocalEventCount
+                    && page.Count > bestCount)
+                {
+                    bestCount = page.Count;
+                    bestIds = page.Results.Select(r => r.Id).ToList();
+                }
+            }
+            catch (JsonException) { }
+        }
+    }
+
+    private async Task<RiftboundEvent?> FetchEventByIdAsync(int id, CancellationToken cancellationToken)
     {
         try
         {
-            return JsonSerializer.Deserialize<string>("\"" + escaped + "\"");
+            var json = await _httpClient.GetStringAsync(
+                $"{BackendApiBaseUrl}{id}/?format=json", cancellationToken);
+            var dto = JsonSerializer.Deserialize<BackendEventDto>(json, JsonOptions);
+            return dto is null ? null : MapToEvent(dto);
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            _logger.LogWarning(ex, "Failed to fetch event {Id} from backend API", id);
             return null;
         }
     }
 
-    private RiftboundEvent MapToEvent(EventDto dto)
-    {
-        var url = dto.Url is not null
-            ? new Uri(dto.Url)
-            : new Uri(_options.BaseUrl);
+    private static readonly TimeSpan DefaultEventDuration = TimeSpan.FromHours(4);
 
+    private RiftboundEvent? MapToEvent(BackendEventDto dto)
+    {
+        if (!DateTimeOffset.TryParse(dto.StartDatetime, out var startDate)) return null;
+        var endDate = DateTimeOffset.TryParse(dto.EndDatetime, out var parsed)
+            ? parsed
+            : startDate + DefaultEventDuration;
+        var url = !string.IsNullOrEmpty(dto.Url) ? new Uri(dto.Url) : new Uri(_options.BaseUrl);
         return new RiftboundEvent(
             id: dto.Id.ToString(),
-            startDate: DateTimeOffset.Parse(dto.StartDatetime),
-            endDate: DateTimeOffset.Parse(dto.EndDatetime),
-            location: new EventLocation(dto.Store.Name, dto.Store.Latitude, dto.Store.Longitude),
+            startDate: startDate,
+            endDate: endDate,
+            location: new EventLocation(dto.Store?.Name ?? "Unknown", dto.Latitude ?? 0.0, dto.Longitude ?? 0.0),
             info: new EventInfo(dto.Name, dto.FormatPretty ?? "Unknown", url));
     }
 
-    private sealed record PaginatedResponseDto(
-        [property: JsonPropertyName("results")] List<EventDto> Results,
-        [property: JsonPropertyName("next")] string? Next);
+    private static string? UnescapeJsString(string escaped)
+    {
+        try { return JsonSerializer.Deserialize<string>("\"" + escaped + "\""); }
+        catch (JsonException) { return null; }
+    }
 
-    private sealed record EventDto(
+    private sealed record LocalEventPageDto(
+        [property: JsonPropertyName("count")] int Count,
+        [property: JsonPropertyName("results")] List<IdDto> Results);
+
+    private sealed record IdDto(
+        [property: JsonPropertyName("id")] int Id);
+
+    private sealed record BackendEventDto(
         [property: JsonPropertyName("id")] int Id,
         [property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("start_datetime")] string StartDatetime,
         [property: JsonPropertyName("end_datetime")] string EndDatetime,
         [property: JsonPropertyName("url")] string? Url,
         [property: JsonPropertyName("format_pretty")] string? FormatPretty,
-        [property: JsonPropertyName("store")] StoreDto Store);
+        [property: JsonPropertyName("latitude")] double? Latitude,
+        [property: JsonPropertyName("longitude")] double? Longitude,
+        [property: JsonPropertyName("store")] BackendStoreDto? Store);
 
-    private sealed record StoreDto(
-        [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("latitude")] double Latitude,
-        [property: JsonPropertyName("longitude")] double Longitude);
+    private sealed record BackendStoreDto(
+        [property: JsonPropertyName("name")] string Name);
 }
