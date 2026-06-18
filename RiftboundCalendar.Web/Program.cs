@@ -12,9 +12,12 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 CultureInfo.DefaultThreadCurrentCulture = new CultureInfo("hu-HU");
 CultureInfo.DefaultThreadCurrentUICulture = new CultureInfo("hu-HU");
 
-var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "https://localhost:7219";
+var apiBaseUrl = builder.Configuration["ApiBaseUrl"];
+var baseAddress = string.IsNullOrEmpty(apiBaseUrl)
+    ? builder.HostEnvironment.BaseAddress
+    : apiBaseUrl;
 builder.Services.AddHttpClient<EventApiClient>(client =>
-    client.BaseAddress = new Uri(apiBaseUrl));
+    client.BaseAddress = new Uri(baseAddress));
 
 builder.Services.AddMudServices();
 
