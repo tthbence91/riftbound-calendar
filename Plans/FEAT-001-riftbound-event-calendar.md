@@ -364,7 +364,7 @@ Blazor WASM → EventApiClient.GetEventsAsync()
 > **Releasable**: Phase végén az app böngészőben futtatható és a naptár eseményeket jelenít meg.
 
 #### Task 4.1 — EventApiClient (Blazor WASM)
-- [ ] **File**: `RiftboundCalendar.Web/Services/EventApiClient.cs`
+- [x] **File**: `RiftboundCalendar.Web/Services/EventApiClient.cs`
 - **Depends on**: Task 3.2
 - **Description**:
   - `public sealed class EventApiClient`
