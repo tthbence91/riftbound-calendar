@@ -3,25 +3,17 @@ namespace RiftboundCalendar.Core.Entities;
 public sealed record RiftboundEvent
 {
     public string Id { get; }
-    public string Title { get; }
     public DateTimeOffset StartDate { get; }
     public DateTimeOffset EndDate { get; }
-    public string LocationName { get; }
-    public double Latitude { get; }
-    public double Longitude { get; }
-    public string Format { get; }
-    public Uri Url { get; }
+    public EventLocation Location { get; }
+    public EventInfo Info { get; }
 
     public RiftboundEvent(
         string id,
-        string title,
         DateTimeOffset startDate,
         DateTimeOffset endDate,
-        string locationName,
-        double latitude,
-        double longitude,
-        string format,
-        Uri url)
+        EventLocation location,
+        EventInfo info)
     {
         if (string.IsNullOrWhiteSpace(id))
             throw new ArgumentException("Id cannot be empty.", nameof(id));
@@ -29,13 +21,9 @@ public sealed record RiftboundEvent
             throw new ArgumentException("End date cannot be before start date.", nameof(endDate));
 
         Id = id;
-        Title = title;
         StartDate = startDate;
         EndDate = endDate;
-        LocationName = locationName;
-        Latitude = latitude;
-        Longitude = longitude;
-        Format = format;
-        Url = url;
+        Location = location;
+        Info = info;
     }
 }

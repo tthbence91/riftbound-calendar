@@ -5,13 +5,12 @@
         "matcher": "Bash",
         "hooks": [
           {
-            "type": "mcp_tool",
-            "server": "codescene",
-            "tool": "code_health_review",
-            "input": {},
+            "type": "command",
+            "command": "powershell.exe -NonInteractive -File C:/Repos/riftbound-calendar/.claude/run-code-health.ps1 -RepoPath C:/Repos/riftbound-calendar",
             "if": "Bash(git commit *)",
             "statusMessage": "CodeScene: Code Health ellenőrzés...",
-            "timeout": 60
+            "timeout": 120,
+            "asyncRewake": true
           }
         ]
       },
@@ -19,13 +18,12 @@
         "matcher": "PowerShell",
         "hooks": [
           {
-            "type": "mcp_tool",
-            "server": "codescene",
-            "tool": "code_health_review",
-            "input": {},
+            "type": "command",
+            "command": "powershell.exe -NonInteractive -File C:/Repos/riftbound-calendar/.claude/run-code-health.ps1 -RepoPath C:/Repos/riftbound-calendar",
             "if": "PowerShell(git commit *)",
             "statusMessage": "CodeScene: Code Health ellenőrzés...",
-            "timeout": 60
+            "timeout": 120,
+            "asyncRewake": true
           }
         ]
       }
