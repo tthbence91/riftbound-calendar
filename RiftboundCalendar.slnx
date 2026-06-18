@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="RiftboundCalendar.Api.Tests/RiftboundCalendar.Api.Tests.csproj" />
+  <Project Path="RiftboundCalendar.Api/RiftboundCalendar.Api.csproj" />
+  <Project Path="RiftboundCalendar.Core.Tests/RiftboundCalendar.Core.Tests.csproj" />
+  <Project Path="RiftboundCalendar.Core/RiftboundCalendar.Core.csproj" />
+  <Project Path="RiftboundCalendar.Infrastructure.Tests/RiftboundCalendar.Infrastructure.Tests.csproj" />
+  <Project Path="RiftboundCalendar.Infrastructure/RiftboundCalendar.Infrastructure.csproj" />
+  <Project Path="RiftboundCalendar.Web/RiftboundCalendar.Web.csproj" />
+</Solution>

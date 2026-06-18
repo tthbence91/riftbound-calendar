@@ -168,34 +168,34 @@ Blazor WASM → EventApiClient.GetEventsAsync()
 > **Releasable**: minden Phase után; az alap solution buildelhető és tesztelhető.
 
 #### Task 1.1 — Solution és projektek létrehozása
-- [ ] **File**: `C:\Repos\riftbound-calendar\RiftboundCalendar.sln`
+- [x] **File**: `C:\Repos\riftbound-calendar\RiftboundCalendar.slnx`
 - **Depends on**: nothing
 - **Description**:
-  - `dotnet new sln -n RiftboundCalendar`
-  - `dotnet new classlib -n RiftboundCalendar.Core --framework net9.0`
-  - `dotnet new classlib -n RiftboundCalendar.Infrastructure --framework net9.0`
-  - `dotnet new webapi -n RiftboundCalendar.Api --framework net9.0`
-  - `dotnet new blazorwasm -n RiftboundCalendar.Web --framework net9.0`
+  - `dotnet new sln -n RiftboundCalendar` → `.slnx` formátum (.NET 10)
+  - `dotnet new classlib -n RiftboundCalendar.Core --framework net10.0`
+  - `dotnet new classlib -n RiftboundCalendar.Infrastructure --framework net10.0`
+  - `dotnet new webapi -n RiftboundCalendar.Api --framework net10.0`
+  - `dotnet new blazorwasm -n RiftboundCalendar.Web --framework net10.0`
   - Solution-höz adás: `dotnet sln add **/*.csproj`
   - Referenciák: Infrastructure → Core; Api → Infrastructure, Core; Web → (standalone, HttpClient)
   - MudBlazor hozzáadása Web projekthez: `dotnet add RiftboundCalendar.Web package MudBlazor`
-- **Releasable**: `dotnet build RiftboundCalendar.sln` sikeresen lefut
+- **Releasable**: `dotnet build RiftboundCalendar.slnx` sikeresen lefut
 - **Tests (TDD)**: N/A (scaffolding)
-- **Checkpoint**: `dotnet build RiftboundCalendar.sln`
+- **Checkpoint**: `dotnet build RiftboundCalendar.slnx`
 
 #### Task 1.2 — Test projektek létrehozása
-- [ ] **File**: `RiftboundCalendar.Core.Tests/RiftboundCalendar.Core.Tests.csproj`
+- [x] **File**: `RiftboundCalendar.Core.Tests/RiftboundCalendar.Core.Tests.csproj`
 - **Depends on**: Task 1.1
 - **Description**:
-  - `dotnet new xunit -n RiftboundCalendar.Core.Tests --framework net9.0`
-  - `dotnet new xunit -n RiftboundCalendar.Infrastructure.Tests --framework net9.0`
-  - `dotnet new xunit -n RiftboundCalendar.Api.Tests --framework net9.0`
+  - `dotnet new xunit -n RiftboundCalendar.Core.Tests --framework net10.0`
+  - `dotnet new xunit -n RiftboundCalendar.Infrastructure.Tests --framework net10.0`
+  - `dotnet new xunit -n RiftboundCalendar.Api.Tests --framework net10.0`
   - Referenciák: Core.Tests → Core; Infrastructure.Tests → Infrastructure, Core; Api.Tests → Api, Infrastructure, Core
   - NuGet: `Moq`, `FluentAssertions`, `Microsoft.AspNetCore.Mvc.Testing` (Api.Tests-hez)
   - Solution-höz adás
-- **Releasable**: `dotnet test RiftboundCalendar.sln` (0 teszt, 0 hiba)
+- **Releasable**: `dotnet test RiftboundCalendar.slnx` (3 teszt, 0 hiba — scaffold tesztek)
 - **Tests (TDD)**: N/A (scaffolding)
-- **Checkpoint**: `dotnet test RiftboundCalendar.sln`
+- **Checkpoint**: `dotnet test RiftboundCalendar.slnx`
 
 ---
 
