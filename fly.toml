@@ -1,4 +1,9 @@
-app = 'riftbound-calendar'
+# fly.toml app configuration file generated for tthbence-riftbound on 2026-06-19T00:35:44+02:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'tthbence-riftbound'
 primary_region = 'ams'
 
 [build]
@@ -15,3 +20,4 @@ primary_region = 'ams'
   memory = '256mb'
   cpu_kind = 'shared'
   cpus = 1
+  memory_mb = 256

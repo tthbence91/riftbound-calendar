@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.StaticFiles;
 using RiftboundCalendar.Core.Interfaces;
 using RiftboundCalendar.Infrastructure.BackgroundServices;
 using RiftboundCalendar.Infrastructure.Caching;
@@ -43,8 +44,16 @@ if (app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
+var contentTypeProvider = new FileExtensionContentTypeProvider();
+contentTypeProvider.Mappings[".dat"] = "application/octet-stream";
+
 app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    ContentTypeProvider = contentTypeProvider,
+    ServeUnknownFileTypes = true,
+    DefaultContentType = "application/octet-stream"
+});
 app.UseCors();
 app.MapControllers();
 app.MapFallbackToFile("index.html");

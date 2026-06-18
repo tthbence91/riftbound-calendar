@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: tthbence-riftbound
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
