@@ -343,7 +343,7 @@ Blazor WASM → EventApiClient.GetEventsAsync()
 - **Checkpoint**: `dotnet test RiftboundCalendar.Api.Tests --filter FullyQualifiedName~EventsController`
 
 #### Task 3.3 — DI regisztráció és appsettings
-- [ ] **File**: `RiftboundCalendar.Api/Program.cs`, `appsettings.json`
+- [x] **File**: `RiftboundCalendar.Api/Program.cs`, `appsettings.json`
 - **Depends on**: Task 2.5, Task 2.6, Task 2.7, Task 3.2
 - **Description**:
   - `builder.Services.Configure<RiftboundOptions>(builder.Configuration.GetSection("Riftbound"))`

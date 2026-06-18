@@ -59,10 +59,7 @@ public class EventsControllerIntegrationTests
     [Fact]
     public async Task GetEvents_Returns200JsonArray_ViaTestServer()
     {
-        await using var factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder =>
-                builder.ConfigureServices(services =>
-                    services.AddSingleton<IEventRepository>(new StubEventRepository([]))));
+        await using var factory = CreateFactory([]);
 
         var response = await factory.CreateClient().GetAsync("/api/events");
 
@@ -83,10 +80,7 @@ public class EventsControllerIntegrationTests
                 new EventInfo("Big Tournament", "Draft", new Uri("https://example.com/bt")))
         };
 
-        await using var factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder =>
-                builder.ConfigureServices(services =>
-                    services.AddSingleton<IEventRepository>(new StubEventRepository(events))));
+        await using var factory = CreateFactory(events);
 
         var response = await factory.CreateClient().GetAsync("/api/events");
 
@@ -98,9 +92,25 @@ public class EventsControllerIntegrationTests
         dtos[0].LocationName.Should().Be("My Store");
     }
 
+    private static WebApplicationFactory<Program> CreateFactory(IReadOnlyList<RiftboundEvent> events) =>
+        new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                // Stub IEventRepository so the controller returns known data
+                services.AddSingleton<IEventRepository>(new StubEventRepository(events));
+                // Stub IEventFetcher so EventRefreshBackgroundService makes no real HTTP calls
+                services.AddSingleton<IEventFetcher>(new StubEventFetcher());
+            }));
+
     private sealed class StubEventRepository(IReadOnlyList<RiftboundEvent> events) : IEventRepository
     {
         public Task<IReadOnlyList<RiftboundEvent>> GetEventsAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(events);
+    }
+
+    private sealed class StubEventFetcher : IEventFetcher
+    {
+        public Task<IReadOnlyList<RiftboundEvent>> FetchAllEventsAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<RiftboundEvent>>([]);
     }
 }
