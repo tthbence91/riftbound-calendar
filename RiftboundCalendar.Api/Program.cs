@@ -21,7 +21,12 @@ builder.Services.AddSingleton<IEventRepository>(
     sp => sp.GetRequiredService<EventCacheRepository>());
 
 builder.Services.AddHttpClient<RiftboundLocatorFetcher>(client =>
-    client.DefaultRequestHeaders.UserAgent.ParseAdd("RiftboundCalendar/1.0"));
+{
+    client.DefaultRequestHeaders.UserAgent.ParseAdd(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
+    client.DefaultRequestHeaders.Add("Accept-Language", "hu-HU,hu;q=0.9,en;q=0.8");
+    client.DefaultRequestHeaders.Add("Cache-Control", "no-cache");
+});
 builder.Services.AddSingleton<IEventFetcher>(
     sp => sp.GetRequiredService<RiftboundLocatorFetcher>());
 
