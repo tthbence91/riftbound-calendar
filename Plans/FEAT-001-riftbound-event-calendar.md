@@ -316,7 +316,7 @@ Blazor WASM → EventApiClient.GetEventsAsync()
 > **Releasable**: Phase végén a backend önállóan futtatható, GET /api/events tesztelhető Swagger-ből vagy curl-ből.
 
 #### Task 3.1 — RiftboundEventDto
-- [ ] **File**: `RiftboundCalendar.Api/Dtos/RiftboundEventDto.cs`
+- [x] **File**: `RiftboundCalendar.Api/Dtos/RiftboundEventDto.cs`
 - **Depends on**: Task 2.1
 - **Description**:
   - `public sealed record RiftboundEventDto(string Id, string Title, DateTimeOffset StartDate, DateTimeOffset EndDate, string LocationName, string Format, string Url)`
