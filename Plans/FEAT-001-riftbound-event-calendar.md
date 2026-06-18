@@ -217,7 +217,7 @@ Blazor WASM → EventApiClient.GetEventsAsync()
 - **Checkpoint**: `dotnet test RiftboundCalendar.Core.Tests`
 
 #### Task 2.2 — IEventFetcher és IEventRepository interfészek
-- [ ] **File**: `RiftboundCalendar.Core/Interfaces/IEventFetcher.cs`, `IEventRepository.cs`
+- [x] **File**: `RiftboundCalendar.Core/Interfaces/IEventFetcher.cs`, `IEventRepository.cs`
 - **Depends on**: Task 2.1
 - **Description**:
   - `IEventFetcher`: `Task<IReadOnlyList<RiftboundEvent>> FetchAllEventsAsync(CancellationToken cancellationToken = default)`
@@ -228,7 +228,7 @@ Blazor WASM → EventApiClient.GetEventsAsync()
 - **Checkpoint**: `dotnet build RiftboundCalendar.Core`
 
 #### Task 2.3 — HaversineFilter
-- [ ] **File**: `RiftboundCalendar.Infrastructure/Filtering/HaversineFilter.cs`
+- [x] **File**: `RiftboundCalendar.Infrastructure/Filtering/HaversineFilter.cs`
 - **Depends on**: Task 2.1
 - **Description**:
   - `public static class HaversineFilter`
@@ -245,27 +245,29 @@ Blazor WASM → EventApiClient.GetEventsAsync()
   - Unit: `test_zero_distance_same_point` — Budapest–Budapest = bent
 - **Checkpoint**: `dotnet test RiftboundCalendar.Infrastructure.Tests --filter FullyQualifiedName~HaversineFilter`
 
-#### Task 2.4 — RiftboundPlaywrightScraper
-- [ ] **File**: `RiftboundCalendar.Infrastructure/Fetching/RiftboundPlaywrightScraper.cs`
+#### Task 2.4 — RiftboundLocatorFetcher (korábban: RiftboundPlaywrightScraper)
+- [x] **File**: `RiftboundCalendar.Infrastructure/Fetching/RiftboundLocatorFetcher.cs`
 - **Depends on**: Task 0.1, Task 2.2
 - **Description**:
-  - Az oldal Next.js App Router + RSC alapú, nincs hagyományos REST API — Playwright szükséges
-  - `public sealed class RiftboundPlaywrightScraper : IEventFetcher`
-  - Konstruktor: `RiftboundPlaywrightScraper(IOptions<RiftboundOptions> options, ILogger<RiftboundPlaywrightScraper> logger)`
-  - `FetchAllEventsAsync`: headless Chromium indul, navigál `{BaseUrl}/events` URL-re, Budapest és 50km sugár előre beállítva (URL paraméter vagy UI interakció)
-  - Vár az esemény lista betöltésére (`WaitForSelectorAsync` az esemény kártyák megjelenéséig)
-  - DOM-ból kinyeri: cím, dátum, helyszín neve, koordináták (ha data-attribútumban vannak), formátum, link
-  - `RiftboundEvent[]` listává alakítja
-  - Playwright exception / timeout esetén: logolás + üres lista (nem dob)
-  - NuGet: `Microsoft.Playwright` — `playwright install chromium` szükséges az első futtatáshoz
-- **Releasable**: scraper manuálisan hívható, konzolból letesztelhető
-- **Tests (TDD)** — `RiftboundCalendar.Infrastructure.Tests/Fetching/RiftboundPlaywrightScraperTests.cs`:
-  - Unit: `test_scraper_returns_empty_on_playwright_exception` — Playwright hiba → üres lista, nem dob
-  - Unit: `test_scraper_returns_empty_on_timeout` — WaitForSelector timeout → üres lista
+  - Task 0.1 feltárta: az esemény adat az initial HTML-ben van (RSC stream, `self.__next_f.push(...)` tagek) — Playwright felesleges, HttpClient elegendő
+  - Háttér-API: `https://api.riftbound.uvsgames.com/api/magic-events/` (DRF paginated JSON)
+  - `public sealed class RiftboundLocatorFetcher : IEventFetcher`
+  - Konstruktor: `(HttpClient httpClient, IOptions<RiftboundOptions> options, ILogger<RiftboundLocatorFetcher> logger)`
+  - `FetchAllEventsAsync`: GET `BaseUrl` HTML → RSC chunk parse → `PaginatedResponseDto` → pagination via `next` URL → `RiftboundEvent[]`
+  - RSC unescape: `JsonSerializer.Deserialize<string>('"' + escaped + '"')` (JSON string unescaping)
+  - HTTP hiba esetén: logolás + üres lista (nem dob)
+  - Geolokáció: a locator szerver IP-alapján szűr (Budapest IP → Budapest eseményeket ad)
+- **Releasable**: fetcher manuálisan hívható
+- **Tests (TDD)** — `RiftboundCalendar.Infrastructure.Tests/Fetching/RiftboundLocatorFetcherTests.cs`:
+  - Unit: `FetchAllEventsAsync_ReturnsEmpty_WhenRscHasZeroResults`
+  - Unit: `FetchAllEventsAsync_ReturnsMappedEvent_WhenRscHasOneEvent`
+  - Unit: `FetchAllEventsAsync_UsesEventUrl_WhenNotNull`
+  - Unit: `FetchAllEventsAsync_ReturnsEmpty_WhenHttpThrows`
+  - Unit: `FetchAllEventsAsync_FetchesBothPages_WhenNextUrlPresent`
 - **Checkpoint**: `dotnet test RiftboundCalendar.Infrastructure.Tests --filter FullyQualifiedName~Fetching`
 
 #### Task 2.5 — RiftboundOptions konfiguráció
-- [ ] **File**: `RiftboundCalendar.Infrastructure/Configuration/RiftboundOptions.cs`
+- [x] **File**: `RiftboundCalendar.Infrastructure/Configuration/RiftboundOptions.cs`
 - **Depends on**: nothing
 - **Description**:
   - `public sealed class RiftboundOptions`
@@ -277,7 +279,7 @@ Blazor WASM → EventApiClient.GetEventsAsync()
 - **Checkpoint**: `dotnet test RiftboundCalendar.Infrastructure.Tests --filter FullyQualifiedName~RiftboundOptions`
 
 #### Task 2.6 — EventCacheRepository
-- [ ] **File**: `RiftboundCalendar.Infrastructure/Caching/EventCacheRepository.cs`
+- [x] **File**: `RiftboundCalendar.Infrastructure/Caching/EventCacheRepository.cs`
 - **Depends on**: Task 2.2
 - **Description**:
   - `public sealed class EventCacheRepository : IEventRepository`
@@ -293,7 +295,7 @@ Blazor WASM → EventApiClient.GetEventsAsync()
 - **Checkpoint**: `dotnet test RiftboundCalendar.Infrastructure.Tests --filter FullyQualifiedName~EventCacheRepository`
 
 #### Task 2.7 — EventRefreshBackgroundService
-- [ ] **File**: `RiftboundCalendar.Infrastructure/BackgroundServices/EventRefreshBackgroundService.cs`
+- [x] **File**: `RiftboundCalendar.Infrastructure/BackgroundServices/EventRefreshBackgroundService.cs`
 - **Depends on**: Task 2.3, Task 2.4, Task 2.5, Task 2.6
 - **Description**:
   - `public sealed class EventRefreshBackgroundService : BackgroundService`
