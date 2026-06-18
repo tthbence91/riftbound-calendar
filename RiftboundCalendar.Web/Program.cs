@@ -1,5 +1,7 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using MudBlazor.Services;
 using RiftboundCalendar.Web;
 using RiftboundCalendar.Web.Services;
 
@@ -7,8 +9,13 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
+CultureInfo.DefaultThreadCurrentCulture = new CultureInfo("hu-HU");
+CultureInfo.DefaultThreadCurrentUICulture = new CultureInfo("hu-HU");
+
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "https://localhost:7219";
 builder.Services.AddHttpClient<EventApiClient>(client =>
     client.BaseAddress = new Uri(apiBaseUrl));
+
+builder.Services.AddMudServices();
 
 await builder.Build().RunAsync();

@@ -378,7 +378,7 @@ Blazor WASM → EventApiClient.GetEventsAsync()
 - **Checkpoint**: `dotnet build RiftboundCalendar.Web`
 
 #### Task 4.2 — CalendarPage (MudCalendar)
-- [ ] **File**: `RiftboundCalendar.Web/Pages/Calendar.razor`
+- [x] **File**: `RiftboundCalendar.Web/Pages/Calendar.razor`
 - **Depends on**: Task 4.1
 - **Description**:
   - `@page "/"`
