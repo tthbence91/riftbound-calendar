@@ -328,7 +328,7 @@ Blazor WASM → EventApiClient.GetEventsAsync()
 - **Checkpoint**: `dotnet test RiftboundCalendar.Api.Tests --filter FullyQualifiedName~RiftboundEventDto`
 
 #### Task 3.2 — EventsController
-- [ ] **File**: `RiftboundCalendar.Api/Controllers/EventsController.cs`
+- [x] **File**: `RiftboundCalendar.Api/Controllers/EventsController.cs`
 - **Depends on**: Task 2.2, Task 3.1
 - **Description**:
   - `[ApiController] [Route("api/[controller]")]`
