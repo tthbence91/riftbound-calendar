@@ -1,5 +1,6 @@
 @page "/"
 @inject EventApiClient ApiClient
+@inject IDialogService DialogService
 
 <PageTitle>Riftbound Eseménynaptár</PageTitle>
 
@@ -48,8 +49,13 @@ else
         _loading = false;
     }
 
-    private void OnItemClicked(RiftboundCalendarItem item)
+    private async Task OnItemClicked(RiftboundCalendarItem item)
     {
-        // Task 4.3: open EventDetailDialog
+        var parameters = new DialogParameters<EventDetailDialog>
+        {
+            { x => x.Event, item.Event }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        await DialogService.ShowAsync<EventDetailDialog>(string.Empty, parameters, options);
     }
 }

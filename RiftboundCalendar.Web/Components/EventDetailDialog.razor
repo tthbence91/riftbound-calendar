@@ -1,0 +1,44 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@Event.Title</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudIcon Icon="@Icons.Material.Filled.Casino" Color="Color.Primary" />
+                <MudText>@Event.Format</MudText>
+            </MudStack>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudIcon Icon="@Icons.Material.Filled.Store" Color="Color.Primary" />
+                <MudText>@Event.LocationName</MudText>
+            </MudStack>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Primary" />
+                <MudText>@FormatDateRange()</MudText>
+            </MudStack>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Href="@Event.Url" Target="_blank" Color="Color.Primary" Variant="Variant.Filled">
+            Regisztráció
+        </MudButton>
+        <MudButton OnClick="Close" Variant="Variant.Text">Bezárás</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public RiftboundEventDto Event { get; set; } = null!;
+
+    private static readonly CultureInfo HunCulture = new("hu-HU");
+
+    private string FormatDateRange()
+    {
+        var start = Event.StartDate.LocalDateTime;
+        var end = Event.EndDate.LocalDateTime;
+        var date = start.ToString("yyyy. MMMM d., dddd", HunCulture);
+        return $"{date}, {start:HH:mm}–{end:HH:mm}";
+    }
+
+    private void Close() => MudDialog.Close();
+}
