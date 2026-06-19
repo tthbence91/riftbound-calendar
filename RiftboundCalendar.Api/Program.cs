@@ -52,20 +52,24 @@ app.UseStaticFiles(new StaticFileOptions
 {
     ContentTypeProvider = contentTypeProvider,
     ServeUnknownFileTypes = true,
-    DefaultContentType = "application/octet-stream"
+    DefaultContentType = "application/octet-stream",
+    OnPrepareResponse = ctx =>
+    {
+        var path = ctx.File.Name;
+        var headers = ctx.Context.Response.Headers;
+        if (path == "index.html")
+        {
+            headers.CacheControl = "no-store, no-cache, must-revalidate";
+        }
+        else if (path.Contains('.') && !path.EndsWith(".html"))
+        {
+            // Fingerprinted assets: cache indefinitely
+            headers.CacheControl = "public, max-age=31536000, immutable";
+        }
+    }
 });
 app.UseCors();
 app.MapControllers();
-
-app.MapGet("/api/debug/wwwroot", (IWebHostEnvironment env) =>
-{
-    var frameworkDir = Path.Combine(env.WebRootPath, "_framework");
-    if (!Directory.Exists(frameworkDir))
-        return Results.Ok(new { webRootPath = env.WebRootPath, frameworkExists = false, files = Array.Empty<string>() });
-    var files = Directory.GetFiles(frameworkDir).Select(Path.GetFileName).Order().ToArray();
-    return Results.Ok(new { webRootPath = env.WebRootPath, frameworkExists = true, files });
-});
-
 app.MapFallbackToFile("index.html");
 
 app.Run();
