@@ -27,7 +27,8 @@ else
                  ShowDay="false"
                  ShowWorkWeek="false"
                  Height="700"
-                 ItemClicked="OnItemClicked" />
+                 ItemClicked="OnItemClicked"
+                 DateRangeChanged="OnDateRangeChanged" />
 }
 
 @code {
@@ -38,15 +39,26 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        _items = await FetchItemsAsync();
+        _loading = false;
+    }
+
+    private async Task OnDateRangeChanged()
+    {
+        if (_loading) return;
+        _items = await FetchItemsAsync();
+    }
+
+    private async Task<List<RiftboundCalendarItem>> FetchItemsAsync()
+    {
         var events = await ApiClient.GetEventsAsync();
-        _items = events.Select(e => new RiftboundCalendarItem
+        return events.Select(e => new RiftboundCalendarItem
         {
             Start = e.StartDate.LocalDateTime,
             End = e.EndDate.LocalDateTime,
             Text = e.Title,
             Event = e
         }).ToList();
-        _loading = false;
     }
 
     private async Task OnItemClicked(RiftboundCalendarItem item)
