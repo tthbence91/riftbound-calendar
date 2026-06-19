@@ -56,6 +56,16 @@ app.UseStaticFiles(new StaticFileOptions
 });
 app.UseCors();
 app.MapControllers();
+
+app.MapGet("/api/debug/wwwroot", (IWebHostEnvironment env) =>
+{
+    var frameworkDir = Path.Combine(env.WebRootPath, "_framework");
+    if (!Directory.Exists(frameworkDir))
+        return Results.Ok(new { webRootPath = env.WebRootPath, frameworkExists = false, files = Array.Empty<string>() });
+    var files = Directory.GetFiles(frameworkDir).Select(Path.GetFileName).Order().ToArray();
+    return Results.Ok(new { webRootPath = env.WebRootPath, frameworkExists = true, files });
+});
+
 app.MapFallbackToFile("index.html");
 
 app.Run();
