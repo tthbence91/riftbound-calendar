@@ -70,6 +70,28 @@ app.UseStaticFiles(new StaticFileOptions
 });
 app.UseCors();
 app.MapControllers();
+
+app.MapGet("/api/debug/fetch", async (
+    RiftboundCalendar.Infrastructure.Fetching.RiftboundLocatorFetcher fetcher,
+    RiftboundCalendar.Infrastructure.Caching.EventCacheRepository cache) =>
+{
+    var events = await fetcher.FetchAllEventsAsync();
+    return Results.Ok(new
+    {
+        fetchedCount = events.Count,
+        cachedCount = cache.HasEvents ? "yes" : "no",
+        firstFew = events.Take(5).Select(e => new
+        {
+            e.Id,
+            e.Info.Title,
+            e.Location.Name,
+            lat = e.Location.Latitude,
+            lng = e.Location.Longitude,
+            start = e.StartDate.ToString("yyyy-MM-dd HH:mm zzz")
+        })
+    });
+});
+
 app.MapFallbackToFile("index.html");
 
 app.Run();
