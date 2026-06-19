@@ -18,54 +18,153 @@ public class RiftboundLocatorFetcherTests
         RadiusKm = 50.0
     };
 
-    // RSC chunk with zero results — no IDs extracted
-    private const string EmptyResultsHtml = """
-        <html><body>
-        <script>self.__next_f.push([1,"34:{\"page_size\":25,\"count\":0,\"results\":[]}\n"])</script>
-        </body></html>
+    private const string SingleEventPageJson = """
+        {
+            "count": 1,
+            "next_page_number": null,
+            "results": [{
+                "id": 12345,
+                "name": "Test Tournament",
+                "start_datetime": "2026-07-01T14:00:00+00:00",
+                "end_datetime": "2026-07-01T18:00:00+00:00",
+                "url": null,
+                "latitude": 47.5,
+                "longitude": 19.05,
+                "store": {"name": "Test Store"},
+                "gameplay_format": {"name": "Constructed"}
+            }]
+        }
         """;
 
-    // Single-line RSC chunk with one event ID
-    private const string OneIdHtml = """
-        <html><body>
-        <script>self.__next_f.push([1,"33:{\"page_size\":25,\"count\":1,\"results\":[{\"id\":12345}]}\n"])</script>
-        </body></html>
+    private const string TwoEventPageJson = """
+        {
+            "count": 2,
+            "next_page_number": null,
+            "results": [
+                {
+                    "id": 12345,
+                    "name": "Test Tournament",
+                    "start_datetime": "2026-07-01T14:00:00+00:00",
+                    "end_datetime": "2026-07-01T18:00:00+00:00",
+                    "url": null,
+                    "latitude": 47.5,
+                    "longitude": 19.05,
+                    "store": {"name": "Test Store"},
+                    "gameplay_format": {"name": "Constructed"}
+                },
+                {
+                    "id": 67890,
+                    "name": "Event 2",
+                    "start_datetime": "2026-07-02T14:00:00+00:00",
+                    "end_datetime": "2026-07-02T18:00:00+00:00",
+                    "url": null,
+                    "latitude": 47.6,
+                    "longitude": 19.1,
+                    "store": {"name": "Store 2"},
+                    "gameplay_format": {"name": "Standard"}
+                }
+            ]
+        }
         """;
 
-    // Multi-line RSC: outer chunk 17:[] followed by local chunk 33: with two IDs
-    private const string TwoIdMultiLineHtml = """
-        <html><body>
-        <script>self.__next_f.push([1,"17:[]\n33:{\"page_size\":25,\"count\":2,\"results\":[{\"id\":12345},{\"id\":67890}]}\n"])</script>
-        </body></html>
+    private const string PageOneOfTwoJson = """
+        {
+            "count": 2,
+            "next_page_number": 2,
+            "results": [{
+                "id": 12345,
+                "name": "Test Tournament",
+                "start_datetime": "2026-07-01T14:00:00+00:00",
+                "end_datetime": "2026-07-01T18:00:00+00:00",
+                "url": null,
+                "latitude": 47.5,
+                "longitude": 19.05,
+                "store": {"name": "Test Store"},
+                "gameplay_format": {"name": "Constructed"}
+            }]
+        }
         """;
 
-    // Global chunk with high count (>500) — must be skipped
-    private const string GlobalChunkHtml = """
-        <html><body>
-        <script>self.__next_f.push([1,"31:{\"page_size\":25,\"count\":60813,\"results\":[{\"id\":1},{\"id\":2}]}\n"])</script>
-        </body></html>
+    private const string PageTwoOfTwoJson = """
+        {
+            "count": 2,
+            "next_page_number": null,
+            "results": [{
+                "id": 67890,
+                "name": "Event 2",
+                "start_datetime": "2026-07-02T14:00:00+00:00",
+                "end_datetime": "2026-07-02T18:00:00+00:00",
+                "url": null,
+                "latitude": 47.6,
+                "longitude": 19.1,
+                "store": {"name": "Store 2"},
+                "gameplay_format": {"name": "Standard"}
+            }]
+        }
         """;
 
-    // RSC chunk with one ID for the URL event
-    private const string OneIdWithUrlHtml = """
-        <html><body>
-        <script>self.__next_f.push([1,"33:{\"page_size\":25,\"count\":1,\"results\":[{\"id\":99999}]}\n"])</script>
-        </body></html>
+    private const string EmptyResultsJson = """
+        {"count": 0, "next_page_number": null, "results": []}
         """;
 
-    private const string OneEventApiJson =
-        """{"id":12345,"name":"Test Tournament","start_datetime":"2026-07-01T14:00:00+00:00","end_datetime":"2026-07-01T18:00:00+00:00","url":null,"format_pretty":"Constructed","latitude":47.5,"longitude":19.05,"store":{"name":"Test Store"}}""";
+    private const string EventWithUrlJson = """
+        {
+            "count": 1,
+            "next_page_number": null,
+            "results": [{
+                "id": 99999,
+                "name": "URL Event",
+                "start_datetime": "2026-08-01T10:00:00+00:00",
+                "end_datetime": "2026-08-01T18:00:00+00:00",
+                "url": "https://example.com/register",
+                "latitude": 47.0,
+                "longitude": 19.0,
+                "store": {"name": "My Store"},
+                "gameplay_format": {"name": "Draft"}
+            }]
+        }
+        """;
 
-    private const string SecondEventApiJson =
-        """{"id":67890,"name":"Event 2","start_datetime":"2026-07-02T14:00:00+00:00","end_datetime":"2026-07-02T18:00:00+00:00","url":null,"format_pretty":"Standard","latitude":47.6,"longitude":19.1,"store":{"name":"Store 2"}}""";
+    private const string EventWithMissingFieldsJson = """
+        {
+            "count": 1,
+            "next_page_number": null,
+            "results": [{
+                "id": 11111,
+                "name": "Minimal Event",
+                "start_datetime": "2026-07-01T14:00:00+00:00",
+                "end_datetime": "2026-07-01T18:00:00+00:00",
+                "url": null,
+                "latitude": 47.5,
+                "longitude": 19.0,
+                "store": null,
+                "gameplay_format": null
+            }]
+        }
+        """;
 
-    private const string EventWithUrlApiJson =
-        """{"id":99999,"name":"URL Event","start_datetime":"2026-08-01T10:00:00+00:00","end_datetime":"2026-08-01T18:00:00+00:00","url":"https://example.com/register","format_pretty":"Draft","latitude":47.0,"longitude":19.0,"store":{"name":"My Store"}}""";
+    private const string EventWithBadDateJson = """
+        {
+            "count": 1,
+            "next_page_number": null,
+            "results": [{
+                "id": 22222,
+                "name": "Bad Date Event",
+                "start_datetime": "not-a-date",
+                "end_datetime": "2026-07-01T18:00:00+00:00",
+                "url": null,
+                "latitude": 47.5,
+                "longitude": 19.0,
+                "store": {"name": "Store"},
+                "gameplay_format": {"name": "Constructed"}
+            }]
+        }
+        """;
 
     [Fact]
-    public async Task FetchAllEventsAsync_ReturnsEmpty_WhenRscHasZeroResults()
+    public async Task FetchAllEventsAsync_ReturnsEmpty_WhenApiReturnsZeroResults()
     {
-        var sut = CreateSut(EmptyResultsHtml);
+        var sut = CreateSut(EmptyResultsJson);
 
         var result = await sut.FetchAllEventsAsync();
 
@@ -73,9 +172,9 @@ public class RiftboundLocatorFetcherTests
     }
 
     [Fact]
-    public async Task FetchAllEventsAsync_ReturnsMappedEvent_WhenRscHasOneId()
+    public async Task FetchAllEventsAsync_ReturnsMappedEvent_WhenApiReturnsOneEvent()
     {
-        var sut = CreateSut(OneIdHtml, OneEventApiJson);
+        var sut = CreateSut(SingleEventPageJson);
 
         var result = await sut.FetchAllEventsAsync();
 
@@ -93,14 +192,48 @@ public class RiftboundLocatorFetcherTests
     }
 
     [Fact]
+    public async Task FetchAllEventsAsync_ReturnsTwoEvents_WhenApiReturnsTwoOnOnePage()
+    {
+        var sut = CreateSut(TwoEventPageJson);
+
+        var result = await sut.FetchAllEventsAsync();
+
+        result.Should().HaveCount(2);
+        result[0].Id.Should().Be("12345");
+        result[1].Id.Should().Be("67890");
+    }
+
+    [Fact]
+    public async Task FetchAllEventsAsync_PaginatesCorrectly_WhenMultiplePagesExist()
+    {
+        var sut = CreateSut(PageOneOfTwoJson, PageTwoOfTwoJson);
+
+        var result = await sut.FetchAllEventsAsync();
+
+        result.Should().HaveCount(2);
+        result[0].Id.Should().Be("12345");
+        result[1].Id.Should().Be("67890");
+    }
+
+    [Fact]
     public async Task FetchAllEventsAsync_UsesEventUrl_WhenNotNull()
     {
-        var sut = CreateSut(OneIdWithUrlHtml, EventWithUrlApiJson);
+        var sut = CreateSut(EventWithUrlJson);
 
         var result = await sut.FetchAllEventsAsync();
 
         result.Should().HaveCount(1);
         result[0].Info.Url.Should().Be(new Uri("https://example.com/register"));
+    }
+
+    [Fact]
+    public async Task FetchAllEventsAsync_UsesBaseUrl_WhenEventUrlIsNull()
+    {
+        var sut = CreateSut(SingleEventPageJson);
+
+        var result = await sut.FetchAllEventsAsync();
+
+        result[0].Info.Url.Should().Be(new Uri("https://locator.example.com"));
     }
 
     [Fact]
@@ -114,21 +247,21 @@ public class RiftboundLocatorFetcherTests
     }
 
     [Fact]
-    public async Task FetchAllEventsAsync_ReturnsTwoEvents_WhenRscHasTwoIds()
+    public async Task FetchAllEventsAsync_UsesUnknownFallbacks_WhenStoreAndFormatAreNull()
     {
-        var sut = CreateSut(TwoIdMultiLineHtml, OneEventApiJson, SecondEventApiJson);
+        var sut = CreateSut(EventWithMissingFieldsJson);
 
         var result = await sut.FetchAllEventsAsync();
 
-        result.Should().HaveCount(2);
-        result[0].Id.Should().Be("12345");
-        result[1].Id.Should().Be("67890");
+        result.Should().HaveCount(1);
+        result[0].Location.Name.Should().Be("Unknown");
+        result[0].Info.Format.Should().Be("Unknown");
     }
 
     [Fact]
-    public async Task FetchAllEventsAsync_ReturnsEmpty_WhenRscChunkExceedsMaxLocalCount()
+    public async Task FetchAllEventsAsync_SkipsEvent_WhenStartDatetimeIsInvalid()
     {
-        var sut = CreateSut(GlobalChunkHtml);
+        var sut = CreateSut(EventWithBadDateJson);
 
         var result = await sut.FetchAllEventsAsync();
 
@@ -136,33 +269,31 @@ public class RiftboundLocatorFetcherTests
     }
 
     [Fact]
-    public async Task FetchAllEventsAsync_PrefersHigherCountChunk_WhenMultiplePushCallsPresent()
+    public async Task FetchAllEventsAsync_UsesDefaultDuration_WhenEndDatetimeIsNull()
     {
-        // chunk 32: (count=3) comes first, chunk 33: (count=21) second — must pick 33:
-        const string html = """
-            <html><body>
-            <script>self.__next_f.push([1,"32:{\"page_size\":25,\"count\":3,\"results\":[{\"id\":1},{\"id\":2},{\"id\":3}]}\n"])</script>
-            <script>self.__next_f.push([1,"33:{\"page_size\":25,\"count\":21,\"results\":[{\"id\":12345}]}\n"])</script>
-            </body></html>
+        const string json = """
+            {
+                "count": 1,
+                "next_page_number": null,
+                "results": [{
+                    "id": 33333,
+                    "name": "No End Event",
+                    "start_datetime": "2026-07-01T14:00:00+00:00",
+                    "end_datetime": null,
+                    "url": null,
+                    "latitude": 47.5,
+                    "longitude": 19.0,
+                    "store": {"name": "Store"},
+                    "gameplay_format": {"name": "Constructed"}
+                }]
+            }
             """;
-        var sut = CreateSut(html, OneEventApiJson);
+        var sut = CreateSut(json);
 
         var result = await sut.FetchAllEventsAsync();
 
         result.Should().HaveCount(1);
-        result[0].Id.Should().Be("12345");
-    }
-
-    [Fact]
-    public async Task FetchAllEventsAsync_SkipsFailedEvent_AndReturnsSuccessful()
-    {
-        // Only one API response provided — second event fetch throws
-        var sut = CreateSut(TwoIdMultiLineHtml, OneEventApiJson);
-
-        var result = await sut.FetchAllEventsAsync();
-
-        result.Should().HaveCount(1);
-        result[0].Id.Should().Be("12345");
+        result[0].EndDate.Should().Be(DateTimeOffset.Parse("2026-07-01T18:00:00+00:00"));
     }
 
     private RiftboundLocatorFetcher CreateSut(string firstResponse, params string[] additionalResponses)

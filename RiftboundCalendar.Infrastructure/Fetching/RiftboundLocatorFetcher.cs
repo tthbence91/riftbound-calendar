@@ -12,12 +12,11 @@ public sealed class RiftboundLocatorFetcher : IEventFetcher
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    private const string PushStart = "self.__next_f.push([1,\"";
-    private const string PushEnd = "\\n\"";
-    private const string PageSizeMarker = "page_size";
-    private const int MaxChunkIdLength = 10;
-    private const int MaxLocalEventCount = 500;
-    private const string BackendApiBaseUrl = "https://api.riftbound.uvsgames.com/api/magic-events/";
+    private const string HydraproxyBaseUrl = "https://api.cloudflare.riftbound.uvsgames.com/hydraproxy";
+    private const string GameSlug = "riftbound";
+    private const int PageSize = 25;
+    private const double KmPerMile = 1.60934;
+    private static readonly TimeSpan DefaultEventDuration = TimeSpan.FromHours(4);
 
     private readonly HttpClient _httpClient;
     private readonly RiftboundOptions _options;
@@ -38,146 +37,90 @@ public sealed class RiftboundLocatorFetcher : IEventFetcher
     {
         try
         {
-            var html = await _httpClient.GetStringAsync(_options.BaseUrl, cancellationToken);
-            var eventIds = ExtractEventIds(html);
+            var numMiles = _options.RadiusKm / KmPerMile;
+            // Budapest midnight = UTC-2h, so start from yesterday 22:00 UTC to include all of today
+            var startDateAfter = DateTime.UtcNow.Date.AddHours(-2)
+                .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            var allEvents = new List<RiftboundEvent>();
+            int? nextPage = 1;
 
-            if (eventIds.Count == 0)
+            while (nextPage.HasValue)
             {
-                _logger.LogWarning("No event IDs found in locator RSC data");
-                return [];
+                var url = BuildUrl(startDateAfter, numMiles, nextPage.Value);
+                var json = await _httpClient.GetStringAsync(url, cancellationToken);
+                var page = JsonSerializer.Deserialize<EventPageDto>(json, JsonOptions);
+
+                if (page?.Results is null or { Count: 0 }) break;
+
+                foreach (var dto in page.Results)
+                {
+                    var evt = MapToEvent(dto);
+                    if (evt is not null) allEvents.Add(evt);
+                }
+
+                _logger.LogInformation(
+                    "Fetched page {Page}: {Fetched}/{Total} events",
+                    nextPage, allEvents.Count, page.Count);
+
+                nextPage = page.NextPageNumber;
             }
 
-            _logger.LogInformation("Found {Count} event IDs from locator", eventIds.Count);
-
-            var events = new List<RiftboundEvent>(eventIds.Count);
-            foreach (var id in eventIds)
-            {
-                var evt = await FetchEventByIdAsync(id, cancellationToken);
-                if (evt is not null) events.Add(evt);
-            }
-
-            _logger.LogInformation("Fetched {Count} full events from backend API", events.Count);
-            return events;
+            _logger.LogInformation("Fetched {Count} events from Riftbound API", allEvents.Count);
+            return allEvents;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError(ex, "Failed to fetch events from Riftbound locator");
+            _logger.LogError(ex, "Failed to fetch events from Riftbound API");
             return [];
         }
     }
 
-    private static IReadOnlyList<int> ExtractEventIds(string html)
-    {
-        List<int>? bestIds = null;
-        var bestCount = 0;
-        var pos = 0;
+    private string BuildUrl(string startDateAfter, double numMiles, int page) =>
+        $"{HydraproxyBaseUrl}/api/v2/events/" +
+        $"?start_date_after={Uri.EscapeDataString(startDateAfter)}" +
+        $"&display_statuses=upcoming&display_statuses=inProgress" +
+        $"&game_slug={GameSlug}" +
+        $"&latitude={_options.BudapestLatitude}&longitude={_options.BudapestLongitude}" +
+        $"&num_miles={numMiles:F4}" +
+        $"&upcoming_only=true" +
+        $"&page={page}&page_size={PageSize}";
 
-        while (pos < html.Length)
-        {
-            var start = html.IndexOf(PushStart, pos, StringComparison.Ordinal);
-            if (start < 0) break;
-
-            var contentStart = start + PushStart.Length;
-            var end = html.IndexOf(PushEnd, contentStart, StringComparison.Ordinal);
-            if (end < 0) { pos = contentStart; continue; }
-
-            var escaped = html[contentStart..end];
-            if (escaped.Contains(PageSizeMarker, StringComparison.Ordinal))
-            {
-                var unescaped = UnescapeJsString(escaped);
-                if (unescaped is not null)
-                    CollectBestChunk(unescaped, ref bestIds, ref bestCount);
-            }
-
-            pos = end + PushEnd.Length;
-        }
-
-        return bestIds ?? [];
-    }
-
-    private static void CollectBestChunk(string content, ref List<int>? bestIds, ref int bestCount)
-    {
-        foreach (var line in content.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (!line.Contains(PageSizeMarker, StringComparison.Ordinal)) continue;
-
-            var colonIdx = line.IndexOf(':');
-            if (colonIdx < 0 || colonIdx > MaxChunkIdLength) continue;
-
-            var json = line[(colonIdx + 1)..];
-            if (!json.StartsWith('{')) continue;
-
-            try
-            {
-                var page = JsonSerializer.Deserialize<LocalEventPageDto>(json, JsonOptions);
-                if (page?.Results is { Count: > 0 } && page.Count is > 0 and <= MaxLocalEventCount
-                    && page.Count > bestCount)
-                {
-                    bestCount = page.Count;
-                    bestIds = page.Results.Select(r => r.Id).ToList();
-                }
-            }
-            catch (JsonException) { }
-        }
-    }
-
-    private async Task<RiftboundEvent?> FetchEventByIdAsync(int id, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var json = await _httpClient.GetStringAsync(
-                $"{BackendApiBaseUrl}{id}/?format=json", cancellationToken);
-            var dto = JsonSerializer.Deserialize<BackendEventDto>(json, JsonOptions);
-            return dto is null ? null : MapToEvent(dto);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogWarning(ex, "Failed to fetch event {Id} from backend API", id);
-            return null;
-        }
-    }
-
-    private static readonly TimeSpan DefaultEventDuration = TimeSpan.FromHours(4);
-
-    private RiftboundEvent? MapToEvent(BackendEventDto dto)
+    private RiftboundEvent? MapToEvent(EventDto dto)
     {
         if (!DateTimeOffset.TryParse(dto.StartDatetime, out var startDate)) return null;
         var endDate = DateTimeOffset.TryParse(dto.EndDatetime, out var parsed)
             ? parsed
             : startDate + DefaultEventDuration;
-        var url = !string.IsNullOrEmpty(dto.Url) ? new Uri(dto.Url) : new Uri(_options.BaseUrl);
+        var url = Uri.TryCreate(dto.Url, UriKind.Absolute, out var eventUri)
+            ? eventUri
+            : new Uri(_options.BaseUrl);
         return new RiftboundEvent(
             id: dto.Id.ToString(),
             startDate: startDate,
             endDate: endDate,
             location: new EventLocation(dto.Store?.Name ?? "Unknown", dto.Latitude ?? 0.0, dto.Longitude ?? 0.0),
-            info: new EventInfo(dto.Name, dto.FormatPretty ?? "Unknown", url));
+            info: new EventInfo(dto.Name, dto.GameplayFormat?.Name ?? "Unknown", url));
     }
 
-    private static string? UnescapeJsString(string escaped)
-    {
-        try { return JsonSerializer.Deserialize<string>("\"" + escaped + "\""); }
-        catch (JsonException) { return null; }
-    }
-
-    private sealed record LocalEventPageDto(
+    private sealed record EventPageDto(
         [property: JsonPropertyName("count")] int Count,
-        [property: JsonPropertyName("results")] List<IdDto> Results);
+        [property: JsonPropertyName("next_page_number")] int? NextPageNumber,
+        [property: JsonPropertyName("results")] List<EventDto> Results);
 
-    private sealed record IdDto(
-        [property: JsonPropertyName("id")] int Id);
-
-    private sealed record BackendEventDto(
+    private sealed record EventDto(
         [property: JsonPropertyName("id")] int Id,
         [property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("start_datetime")] string StartDatetime,
         [property: JsonPropertyName("end_datetime")] string EndDatetime,
         [property: JsonPropertyName("url")] string? Url,
-        [property: JsonPropertyName("format_pretty")] string? FormatPretty,
         [property: JsonPropertyName("latitude")] double? Latitude,
         [property: JsonPropertyName("longitude")] double? Longitude,
-        [property: JsonPropertyName("store")] BackendStoreDto? Store);
+        [property: JsonPropertyName("store")] StoreDto? Store,
+        [property: JsonPropertyName("gameplay_format")] GameplayFormatDto? GameplayFormat);
 
-    private sealed record BackendStoreDto(
+    private sealed record StoreDto(
+        [property: JsonPropertyName("name")] string Name);
+
+    private sealed record GameplayFormatDto(
         [property: JsonPropertyName("name")] string Name);
 }
