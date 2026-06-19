@@ -45,6 +45,7 @@ else
                      ShowWorkWeek="false"
                      Height="700"
                      ItemClicked="OnItemClicked"
+                     MoreClicked="OnMoreClicked"
                      DateRangeChanged="OnDateRangeChanged" />
     }
 }
@@ -94,6 +95,22 @@ else
             Text = e.Title,
             Event = e
         }).ToList();
+    }
+
+    private async Task OnMoreClicked(DateTime date)
+    {
+        var dayItems = _items
+            .Where(i => i.Start.Date == date.Date)
+            .OrderBy(i => i.Start)
+            .ToList();
+
+        var parameters = new DialogParameters<DayEventsDialog>
+        {
+            { x => x.Date, date },
+            { x => x.Items, dayItems }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseOnEscapeKey = true };
+        await DialogService.ShowAsync<DayEventsDialog>(string.Empty, parameters, options);
     }
 
     private async Task OnItemClicked(RiftboundCalendarItem item)
