@@ -25,6 +25,8 @@ public class RiftboundEventDtoTests
         dto.StartDate.Should().Be(startDate);
         dto.EndDate.Should().Be(endDate);
         dto.LocationName.Should().Be("Test Store");
+        dto.Latitude.Should().Be(47.5);
+        dto.Longitude.Should().Be(19.05);
         dto.Format.Should().Be("Constructed");
         dto.Url.Should().Be("https://example.com/event");
     }

@@ -6,5 +6,7 @@ public sealed record RiftboundEventDto(
     DateTimeOffset StartDate,
     DateTimeOffset EndDate,
     string LocationName,
+    double Latitude,
+    double Longitude,
     string Format,
     string Url);

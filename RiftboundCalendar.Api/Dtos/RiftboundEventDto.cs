@@ -8,6 +8,8 @@ public sealed record RiftboundEventDto(
     DateTimeOffset StartDate,
     DateTimeOffset EndDate,
     string LocationName,
+    double Latitude,
+    double Longitude,
     string Format,
     string Url)
 {
@@ -18,6 +20,8 @@ public sealed record RiftboundEventDto(
             StartDate: e.StartDate,
             EndDate: e.EndDate,
             LocationName: e.Location.Name,
+            Latitude: e.Location.Latitude,
+            Longitude: e.Location.Longitude,
             Format: e.Info.Format,
             Url: e.Info.Url.ToString());
 }

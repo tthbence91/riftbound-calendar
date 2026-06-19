@@ -1,0 +1,53 @@
+@inject IDialogService DialogService
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@_title</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudList T="RiftboundCalendarItem" ReadOnly="false">
+            @foreach (var item in Items)
+            {
+                <MudListItem T="RiftboundCalendarItem" OnClick="() => OpenEvent(item)">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body1">@item.Event.Title</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @FormatTime(item.Start) – @FormatTime(item.End) · @item.Event.LocationName
+                        </MudText>
+                    </MudStack>
+                </MudListItem>
+            }
+        </MudList>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => MudDialog.Close()">Bezárás</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public DateTime Date { get; set; }
+    [Parameter] public IReadOnlyList<RiftboundCalendarItem> Items { get; set; } = [];
+
+    private string _title = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        _title = Date.ToString("yyyy. MMMM d., dddd", new System.Globalization.CultureInfo("hu-HU"));
+    }
+
+    private static string FormatTime(DateTime? dt) =>
+        dt.HasValue ? $"{dt.Value.Hour:00}:{dt.Value.Minute:00}" : "";
+
+    private async Task OpenEvent(RiftboundCalendarItem item)
+    {
+        MudDialog.Close();
+        var parameters = new DialogParameters<EventDetailDialog>
+        {
+            { x => x.Event, item.Event }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        await DialogService.ShowAsync<EventDetailDialog>(string.Empty, parameters, options);
+    }
+}

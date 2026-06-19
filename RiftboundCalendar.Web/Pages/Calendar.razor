@@ -11,42 +11,78 @@
         <MudText Typo="Typo.body1" Class="mt-2">Események betöltése...</MudText>
     </MudStack>
 }
-else if (_items.Count == 0)
-{
-    <MudStack AlignItems="AlignItems.Center" Class="mt-16">
-        <MudText Typo="Typo.h6" Color="Color.Secondary">Jelenleg nincsenek események a közelben.</MudText>
-    </MudStack>
-}
 else
 {
-    <MudCalendar T="RiftboundCalendarItem"
-                 Items="_items"
-                 Culture="_culture"
-                 View="CalendarView.Month"
-                 FirstDayOfWeek="DayOfWeek.Monday"
-                 ShowDay="false"
-                 ShowWorkWeek="false"
-                 Height="700"
-                 ItemClicked="OnItemClicked"
-                 DateRangeChanged="OnDateRangeChanged" />
+    <MudPaper Class="pa-4 mb-3" Elevation="1">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
+            <MudText Typo="Typo.body2" Style="white-space: nowrap">Keresési sugár:</MudText>
+            <MudSlider T="int"
+                       @bind-Value="RadiusKm"
+                       Min="10" Max="200" Step="5"
+                       ValueLabel="true"
+                       Style="flex: 1" />
+            <MudText Typo="Typo.body2">@RadiusKm km</MudText>
+            <MudText Typo="Typo.body2" Style="white-space: nowrap; min-width: 80px">
+                @_items.Count esemény
+            </MudText>
+        </MudStack>
+    </MudPaper>
+
+    @if (_items.Count == 0)
+    {
+        <MudStack AlignItems="AlignItems.Center" Class="mt-16">
+            <MudText Typo="Typo.h6" Color="Color.Secondary">Nincsenek események a megadott területen.</MudText>
+        </MudStack>
+    }
+    else
+    {
+        <MudCalendar T="RiftboundCalendarItem"
+                     Items="_items"
+                     Culture="_culture"
+                     View="CalendarView.Month"
+                     FirstDayOfWeek="DayOfWeek.Monday"
+                     ShowDay="false"
+                     ShowWorkWeek="false"
+                     Height="700"
+                     ItemClicked="OnItemClicked"
+                     MoreClicked="OnMoreClicked"
+                     DateRangeChanged="OnDateRangeChanged" />
+    }
 }
 
 @code {
     private static readonly CultureInfo _culture = new("hu-HU");
+    private const double CenterLat = 47.4979;
+    private const double CenterLng = 19.0402;
+    private const int DefaultRadiusKm = 50;
 
+    private List<RiftboundCalendarItem> _allItems = [];
     private List<RiftboundCalendarItem> _items = [];
     private bool _loading = true;
 
+    private int _radiusKm = DefaultRadiusKm;
+    private int RadiusKm
+    {
+        get => _radiusKm;
+        set
+        {
+            _radiusKm = value;
+            _items = GeoFilter.Apply(_allItems, CenterLat, CenterLng, _radiusKm);
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
-        _items = await FetchItemsAsync();
+        _allItems = await FetchItemsAsync();
+        _items = GeoFilter.Apply(_allItems, CenterLat, CenterLng, _radiusKm);
         _loading = false;
     }
 
     private async Task OnDateRangeChanged()
     {
         if (_loading) return;
-        _items = await FetchItemsAsync();
+        _allItems = await FetchItemsAsync();
+        _items = GeoFilter.Apply(_allItems, CenterLat, CenterLng, _radiusKm);
     }
 
     private async Task<List<RiftboundCalendarItem>> FetchItemsAsync()
@@ -59,6 +95,22 @@ else
             Text = e.Title,
             Event = e
         }).ToList();
+    }
+
+    private async Task OnMoreClicked(DateTime date)
+    {
+        var dayItems = _items
+            .Where(i => i.Start.Date == date.Date)
+            .OrderBy(i => i.Start)
+            .ToList();
+
+        var parameters = new DialogParameters<DayEventsDialog>
+        {
+            { x => x.Date, date },
+            { x => x.Items, dayItems }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseOnEscapeKey = true };
+        await DialogService.ShowAsync<DayEventsDialog>(string.Empty, parameters, options);
     }
 
     private async Task OnItemClicked(RiftboundCalendarItem item)
