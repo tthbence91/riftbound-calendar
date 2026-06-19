@@ -71,45 +71,6 @@ app.UseStaticFiles(new StaticFileOptions
 app.UseCors();
 app.MapControllers();
 
-app.MapGet("/api/debug/fetch", async (
-    IHttpClientFactory httpClientFactory,
-    Microsoft.Extensions.Options.IOptions<RiftboundOptions> opts) =>
-{
-    var options = opts.Value;
-    var numMiles = options.RadiusKm / 1.60934;
-    var startDateAfter = DateTime.UtcNow.Date.AddHours(-2).ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-    var url = $"https://api.cloudflare.riftbound.uvsgames.com/hydraproxy/api/v2/events/" +
-        $"?start_date_after={Uri.EscapeDataString(startDateAfter)}" +
-        $"&display_statuses=upcoming&display_statuses=inProgress" +
-        $"&game_slug=riftbound" +
-        $"&latitude={options.BudapestLatitude}&longitude={options.BudapestLongitude}" +
-        $"&num_miles={numMiles:F4}" +
-        $"&upcoming_only=true&page=1&page_size=5";
-
-    var client = httpClientFactory.CreateClient();
-    client.DefaultRequestHeaders.UserAgent.ParseAdd(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
-    client.DefaultRequestHeaders.Add("Origin", "https://locator.riftbound.uvsgames.com");
-    client.DefaultRequestHeaders.Referrer = new Uri("https://locator.riftbound.uvsgames.com/");
-    client.DefaultRequestHeaders.Add("Accept", "application/json");
-
-    try
-    {
-        var response = await client.GetAsync(url);
-        var body = await response.Content.ReadAsStringAsync();
-        return Results.Ok(new
-        {
-            requestUrl = url,
-            statusCode = (int)response.StatusCode,
-            bodyPreview = body.Length > 500 ? body[..500] : body
-        });
-    }
-    catch (Exception ex)
-    {
-        return Results.Ok(new { error = ex.Message, requestUrl = url });
-    }
-});
-
 app.MapFallbackToFile("index.html");
 
 app.Run();

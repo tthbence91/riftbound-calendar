@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -12,7 +13,7 @@ public sealed class RiftboundLocatorFetcher : IEventFetcher
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    private const string HydraproxyBaseUrl = "https://api.cloudflare.riftbound.uvsgames.com/hydraproxy";
+    private const string ApiBaseUrl = "https://api.riftbound.uvsgames.com";
     private const string GameSlug = "riftbound";
     private const int PageSize = 25;
     private const double KmPerMile = 1.60934;
@@ -37,8 +38,9 @@ public sealed class RiftboundLocatorFetcher : IEventFetcher
     {
         try
         {
-            var numMiles = _options.RadiusKm / KmPerMile;
-            // Budapest midnight = UTC-2h, so start from yesterday 22:00 UTC to include all of today
+            // Integer miles required by API; 50 km ≈ 31 miles
+            var numMiles = (int)Math.Round(_options.RadiusKm / KmPerMile);
+            // Budapest midnight = UTC-2h, start from yesterday 22:00 UTC to include all of today
             var startDateAfter = DateTime.UtcNow.Date.AddHours(-2)
                 .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
             var allEvents = new List<RiftboundEvent>();
@@ -75,15 +77,19 @@ public sealed class RiftboundLocatorFetcher : IEventFetcher
         }
     }
 
-    private string BuildUrl(string startDateAfter, double numMiles, int page) =>
-        $"{HydraproxyBaseUrl}/api/v2/events/" +
-        $"?start_date_after={Uri.EscapeDataString(startDateAfter)}" +
-        $"&display_statuses=upcoming&display_statuses=inProgress" +
-        $"&game_slug={GameSlug}" +
-        $"&latitude={_options.BudapestLatitude}&longitude={_options.BudapestLongitude}" +
-        $"&num_miles={numMiles:F4}" +
-        $"&upcoming_only=true" +
-        $"&page={page}&page_size={PageSize}";
+    private string BuildUrl(string startDateAfter, int numMiles, int page)
+    {
+        var lat = _options.BudapestLatitude.ToString("F4", CultureInfo.InvariantCulture);
+        var lng = _options.BudapestLongitude.ToString("F4", CultureInfo.InvariantCulture);
+        return $"{ApiBaseUrl}/api/v2/events/" +
+            $"?start_date_after={Uri.EscapeDataString(startDateAfter)}" +
+            $"&display_statuses=upcoming&display_statuses=inProgress" +
+            $"&game_slug={GameSlug}" +
+            $"&latitude={lat}&longitude={lng}" +
+            $"&num_miles={numMiles}" +
+            $"&upcoming_only=true" +
+            $"&page={page}&page_size={PageSize}";
+    }
 
     private RiftboundEvent? MapToEvent(EventDto dto)
     {
