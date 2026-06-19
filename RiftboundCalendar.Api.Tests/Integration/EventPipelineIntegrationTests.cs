@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using RiftboundCalendar.Api.Dtos;
 using RiftboundCalendar.Core.Entities;
@@ -67,6 +69,8 @@ public class EventPipelineIntegrationTests
         dtos.Should().ContainSingle();
         dtos![0].StartDate.Should().Be(new DateTimeOffset(2026, 7, 1, 14, 0, 0, TimeSpan.Zero));
         dtos[0].EndDate.Should().Be(new DateTimeOffset(2026, 7, 1, 18, 0, 0, TimeSpan.Zero));
+        dtos[0].Latitude.Should().Be(47.4979);
+        dtos[0].Longitude.Should().Be(19.0402);
         dtos[0].Url.Should().Be("https://example.com/bud");
     }
 
@@ -115,11 +119,19 @@ public class EventPipelineIntegrationTests
 
     private static WebApplicationFactory<Program> CreateFactory(
         IReadOnlyList<RiftboundEvent> events,
-        TaskCompletionSource onFetched) =>
+        TaskCompletionSource onFetched,
+        double radiusKm = 50.0) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
             builder.ConfigureServices(services =>
                 services.AddSingleton<IEventFetcher>(
-                    new SignalingStubFetcher(events, onFetched))));
+                    new SignalingStubFetcher(events, onFetched)));
+            builder.ConfigureAppConfiguration((_, config) =>
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Riftbound:RadiusKm"] = radiusKm.ToString(CultureInfo.InvariantCulture)
+                }));
+        });
 
     private sealed class SignalingStubFetcher(
         IReadOnlyList<RiftboundEvent> events,
