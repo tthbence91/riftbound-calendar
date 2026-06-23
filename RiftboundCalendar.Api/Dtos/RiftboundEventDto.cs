@@ -13,6 +13,10 @@ public sealed class RiftboundEventDto
     public double Longitude { get; init; }
     public string Format { get; init; } = "";
     public string Url { get; init; } = "";
+    public int? CostInCents { get; init; }
+    public string? Currency { get; init; }
+    public int? Capacity { get; init; }
+    public int? RegisteredCount { get; init; }
 
     public static RiftboundEventDto FromDomain(RiftboundEvent e) =>
         new()
@@ -25,6 +29,10 @@ public sealed class RiftboundEventDto
             Latitude = e.Location.Latitude,
             Longitude = e.Location.Longitude,
             Format = e.Info.Format,
-            Url = e.Info.Url.ToString()
+            Url = e.Info.Url.ToString(),
+            CostInCents = e.Stats.CostInCents,
+            Currency = e.Stats.Currency,
+            Capacity = e.Stats.Capacity,
+            RegisteredCount = e.Stats.RegisteredCount
         };
 }

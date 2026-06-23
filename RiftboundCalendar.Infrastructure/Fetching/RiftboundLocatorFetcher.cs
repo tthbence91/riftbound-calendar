@@ -107,13 +107,22 @@ public sealed class RiftboundLocatorFetcher : IEventFetcher
             : startDate + DefaultEventDuration;
         var url = Uri.TryCreate(dto.Url, UriKind.Absolute, out var eventUri)
             ? eventUri
-            : new Uri(_options.BaseUrl);
+            : new Uri($"{_options.BaseUrl}/events/{dto.Id}");
         return new RiftboundEvent(
             id: dto.Id.ToString(),
             startDate: startDate,
             endDate: endDate,
             location: new EventLocation(dto.Store?.Name ?? "Unknown", dto.Latitude ?? 0.0, dto.Longitude ?? 0.0),
-            info: new EventInfo(dto.Name, dto.GameplayFormat?.Name ?? "Unknown", url));
+            info: new EventInfo(dto.Name, dto.GameplayFormat?.Name ?? "Unknown", url))
+        {
+            Stats = new EventStats
+            {
+                CostInCents = dto.CostInCents,
+                Currency = dto.Currency,
+                Capacity = dto.Capacity,
+                RegisteredCount = dto.RegisteredUserCount
+            }
+        };
     }
 
     private sealed record EventPageDto(
@@ -130,7 +139,11 @@ public sealed class RiftboundLocatorFetcher : IEventFetcher
         [property: JsonPropertyName("latitude")] double? Latitude,
         [property: JsonPropertyName("longitude")] double? Longitude,
         [property: JsonPropertyName("store")] StoreDto? Store,
-        [property: JsonPropertyName("gameplay_format")] GameplayFormatDto? GameplayFormat);
+        [property: JsonPropertyName("gameplay_format")] GameplayFormatDto? GameplayFormat,
+        [property: JsonPropertyName("cost_in_cents")] int? CostInCents,
+        [property: JsonPropertyName("currency")] string? Currency,
+        [property: JsonPropertyName("capacity")] int? Capacity,
+        [property: JsonPropertyName("registered_user_count")] int? RegisteredUserCount);
 
     private sealed record StoreDto(
         [property: JsonPropertyName("name")] string Name);

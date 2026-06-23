@@ -16,11 +16,29 @@
                 <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Primary" />
                 <MudText>@FormatDateRange()</MudText>
             </MudStack>
+            @if (Event.CostInCents.HasValue)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Color="Color.Primary" />
+                    <MudText>@FormatPrice()</MudText>
+                </MudStack>
+            }
+            @if (Event.Capacity.HasValue || Event.RegisteredCount.HasValue)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.People" Color="Color.Primary" />
+                    <MudText>@FormatAttendance()</MudText>
+                </MudStack>
+            }
+            <iframe src="@MapUrl"
+                    style="width:100%;height:180px;border:none;border-radius:4px;margin-top:4px"
+                    loading="lazy" />
         </MudStack>
     </DialogContent>
     <DialogActions>
-        <MudButton Href="@Event.Url" Target="_blank" Color="Color.Primary" Variant="Variant.Filled">
-            Regisztráció
+        <MudButton Href="@Event.Url" Target="_blank" Color="Color.Primary" Variant="Variant.Filled"
+                   StartIcon="@Icons.Material.Filled.OpenInNew">
+            Esemény oldala
         </MudButton>
         <MudButton OnClick="Close" Variant="Variant.Text">Bezárás</MudButton>
     </DialogActions>
@@ -32,12 +50,45 @@
 
     private static readonly CultureInfo HunCulture = new("hu-HU");
 
+    private string MapUrl => BuildMapUrl(Event.Latitude, Event.Longitude);
+
+    private static string BuildMapUrl(double lat, double lng)
+    {
+        const double delta = 0.012;
+        var west = (lng - delta).ToString("F6", CultureInfo.InvariantCulture);
+        var south = (lat - delta).ToString("F6", CultureInfo.InvariantCulture);
+        var east = (lng + delta).ToString("F6", CultureInfo.InvariantCulture);
+        var north = (lat + delta).ToString("F6", CultureInfo.InvariantCulture);
+        var latStr = lat.ToString("F6", CultureInfo.InvariantCulture);
+        var lngStr = lng.ToString("F6", CultureInfo.InvariantCulture);
+        return $"https://www.openstreetmap.org/export/embed.html?bbox={west},{south},{east},{north}&layer=mapnik&marker={latStr},{lngStr}";
+    }
+
     private string FormatDateRange()
     {
         var start = Event.StartDate.LocalDateTime;
         var end = Event.EndDate.LocalDateTime;
         var date = start.ToString("yyyy. MMMM d., dddd", HunCulture);
         return $"{date}, {start:HH:mm}–{end:HH:mm}";
+    }
+
+    private string FormatPrice()
+    {
+        if (!Event.CostInCents.HasValue) return "";
+        var amount = Event.CostInCents.Value / 100;
+        var currency = Event.Currency ?? "HUF";
+        return currency == "HUF"
+            ? $"{amount:N0} Ft".Replace(",", " ")
+            : $"{amount:N2} {currency}";
+    }
+
+    private string FormatAttendance()
+    {
+        if (Event.RegisteredCount.HasValue && Event.Capacity.HasValue)
+            return $"{Event.RegisteredCount} / {Event.Capacity} jelentkező";
+        if (Event.RegisteredCount.HasValue)
+            return $"{Event.RegisteredCount} jelentkező";
+        return $"Max. {Event.Capacity} fő";
     }
 
     private void Close() => MudDialog.Close();
