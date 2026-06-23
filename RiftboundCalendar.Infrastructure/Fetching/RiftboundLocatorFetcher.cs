@@ -38,9 +38,7 @@ public sealed class RiftboundLocatorFetcher : IEventFetcher
     {
         try
         {
-            // Integer miles required by API; 50 km ≈ 31 miles
             var numMiles = (int)Math.Round(_options.RadiusKm / KmPerMile);
-            // Budapest midnight = UTC-2h, start from yesterday 22:00 UTC to include all of today
             var startDateAfter = DateTime.UtcNow.Date.AddHours(-2)
                 .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
             var allEvents = new List<RiftboundEvent>();
@@ -48,21 +46,13 @@ public sealed class RiftboundLocatorFetcher : IEventFetcher
 
             while (nextPage.HasValue)
             {
-                var url = BuildUrl(startDateAfter, numMiles, nextPage.Value);
-                var json = await _httpClient.GetStringAsync(url, cancellationToken);
-                var page = JsonSerializer.Deserialize<EventPageDto>(json, JsonOptions);
+                var page = await FetchPageAsync(startDateAfter, numMiles, nextPage.Value, cancellationToken);
+                if (page is null) break;
 
-                if (page?.Results is null or { Count: 0 }) break;
-
-                foreach (var dto in page.Results)
-                {
-                    var evt = MapToEvent(dto);
-                    if (evt is not null) allEvents.Add(evt);
-                }
-
+                allEvents.AddRange(page.Events);
                 _logger.LogInformation(
                     "Fetched page {Page}: {Fetched}/{Total} events",
-                    nextPage, allEvents.Count, page.Count);
+                    nextPage, allEvents.Count, page.TotalCount);
 
                 nextPage = page.NextPageNumber;
             }
@@ -76,6 +66,24 @@ public sealed class RiftboundLocatorFetcher : IEventFetcher
             return [];
         }
     }
+
+    private async Task<PageResult?> FetchPageAsync(
+        string startDateAfter, int numMiles, int page, CancellationToken cancellationToken)
+    {
+        var url = BuildUrl(startDateAfter, numMiles, page);
+        var json = await _httpClient.GetStringAsync(url, cancellationToken);
+        var dto = JsonSerializer.Deserialize<EventPageDto>(json, JsonOptions);
+
+        if (dto?.Results is null or { Count: 0 }) return null;
+
+        var events = dto.Results.Select(MapToEvent).OfType<RiftboundEvent>().ToList();
+        return new PageResult(events, dto.Count, dto.NextPageNumber);
+    }
+
+    private sealed record PageResult(
+        List<RiftboundEvent> Events,
+        int TotalCount,
+        int? NextPageNumber);
 
     private string BuildUrl(string startDateAfter, int numMiles, int page)
     {
