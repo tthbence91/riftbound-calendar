@@ -105,22 +105,26 @@ code {
     color: #c02d76;
 }
 
-@media (max-width: 959.95px) {
-    .mobile-bottom-safe {
-        padding-bottom: 70px !important;
-    }
+.mobile-bottom-nav {
+    display: none;
 }
 
-.mobile-bottom-nav {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 60px;
-    display: flex;
-    align-items: stretch;
-    z-index: 1300;
-    background-color: var(--mud-palette-primary);
+@media (max-width: 959.95px) {
+    .mobile-bottom-safe {
+        padding-bottom: 80px !important;
+    }
+
+    .mobile-bottom-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 72px;
+        display: flex;
+        align-items: stretch;
+        z-index: 1300;
+        background-color: var(--mud-palette-primary);
+    }
 }
 
 .mobile-nav-item {
@@ -131,8 +135,8 @@ code {
     justify-content: center;
     color: rgba(255, 255, 255, 0.65);
     text-decoration: none;
-    font-size: 0.7rem;
-    gap: 2px;
+    font-size: 0.75rem;
+    gap: 4px;
 }
 
 .mobile-nav-item.active {
@@ -140,7 +144,7 @@ code {
 }
 
 .mobile-nav-item .mud-icon-root {
-    font-size: 1.5rem;
+    font-size: 1.6rem;
 }
 
 .form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {

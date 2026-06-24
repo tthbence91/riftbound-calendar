@@ -21,16 +21,14 @@
             @Body
         </MudContainer>
     </MudMainContent>
-    <MudHidden Breakpoint="Breakpoint.MdAndUp">
-        <div class="mobile-bottom-nav mud-elevation-8">
-            <NavLink href="/" Match="NavLinkMatch.All" class="mobile-nav-item">
-                <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" />
-                <span>Naptár</span>
-            </NavLink>
-            <NavLink href="/kedvencek" class="mobile-nav-item">
-                <MudIcon Icon="@Icons.Material.Filled.Star" />
-                <span>Kedvencek</span>
-            </NavLink>
-        </div>
-    </MudHidden>
+    <div class="mobile-bottom-nav mud-elevation-8">
+        <NavLink href="/" Match="NavLinkMatch.All" class="mobile-nav-item">
+            <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" />
+            <span>Naptár</span>
+        </NavLink>
+        <NavLink href="/kedvencek" class="mobile-nav-item">
+            <MudIcon Icon="@Icons.Material.Filled.Star" />
+            <span>Kedvencek</span>
+        </NavLink>
+    </div>
 </MudLayout>
