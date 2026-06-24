@@ -118,6 +118,7 @@ public sealed class RiftboundLocatorFetcher : IEventFetcher
             Stats = new EventStats
             {
                 StoreId = dto.Store?.Id?.ToString(),
+                QueueStatus = dto.QueueStatus,
                 CostInCents = dto.CostInCents,
                 Currency = dto.Currency,
                 Capacity = dto.Capacity,
@@ -144,7 +145,8 @@ public sealed class RiftboundLocatorFetcher : IEventFetcher
         [property: JsonPropertyName("cost_in_cents")] int? CostInCents,
         [property: JsonPropertyName("currency")] string? Currency,
         [property: JsonPropertyName("capacity")] int? Capacity,
-        [property: JsonPropertyName("registered_user_count")] int? RegisteredUserCount);
+        [property: JsonPropertyName("registered_user_count")] int? RegisteredUserCount,
+        [property: JsonPropertyName("queue_status")] string? QueueStatus);
 
     private sealed record StoreDto(
         [property: JsonPropertyName("id")] int? Id,

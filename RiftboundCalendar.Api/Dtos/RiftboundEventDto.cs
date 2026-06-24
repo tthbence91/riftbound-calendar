@@ -14,6 +14,7 @@ public sealed class RiftboundEventDto
     public string Format { get; init; } = "";
     public string Url { get; init; } = "";
     public string? StoreId { get; init; }
+    public string? QueueStatus { get; init; }
     public int? CostInCents { get; init; }
     public string? Currency { get; init; }
     public int? Capacity { get; init; }
@@ -32,6 +33,7 @@ public sealed class RiftboundEventDto
             Format = e.Info.Format,
             Url = e.Info.Url.ToString(),
             StoreId = e.Stats.StoreId,
+            QueueStatus = e.Stats.QueueStatus,
             CostInCents = e.Stats.CostInCents,
             Currency = e.Stats.Currency,
             Capacity = e.Stats.Capacity,
