@@ -9,9 +9,9 @@
         <div id="@_mapElementId" style="height: 360px; width: 100%; border-radius: 8px; z-index: 0;"></div>
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mt-4">
             <MudText Typo="Typo.body2" Style="white-space: nowrap">Keresési sugár:</MudText>
-            <MudSlider T="int" @bind-Value="RadiusKm" Min="10" Max="200" Step="5"
-                       ValueLabel="true" Style="flex: 1" Color="Color.Primary" />
-            <MudText Typo="Typo.body2" Style="white-space: nowrap; min-width: 50px">@RadiusKm km</MudText>
+            <MudNumericField T="int" @bind-Value="RadiusKm" Min="1" Adornment="Adornment.End"
+                             AdornmentText="km" Variant="Variant.Outlined" Margin="Margin.Dense"
+                             Style="max-width: 140px" HideSpinButtons="true" />
         </MudStack>
         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
             Húzd a jelölőt az új keresési középpontra.
