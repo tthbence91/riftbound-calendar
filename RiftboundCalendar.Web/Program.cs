@@ -21,5 +21,6 @@ builder.Services.AddHttpClient<EventApiClient>(client =>
 
 builder.Services.AddMudServices();
 builder.Services.AddSingleton<FavoritesService>();
+builder.Services.AddSingleton<LocationPreferenceService>();
 
 await builder.Build().RunAsync();

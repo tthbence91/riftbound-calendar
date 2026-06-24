@@ -1,0 +1,86 @@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Keresési terület beállítása</MudText>
+    </TitleContent>
+    <DialogContent>
+        <div id="@_mapElementId" style="height: 360px; width: 100%; border-radius: 8px; z-index: 0;"></div>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mt-4">
+            <MudText Typo="Typo.body2" Style="white-space: nowrap">Keresési sugár:</MudText>
+            <MudSlider T="int" @bind-Value="RadiusKm" Min="10" Max="200" Step="5"
+                       ValueLabel="true" Style="flex: 1" Color="Color.Primary" />
+            <MudText Typo="Typo.body2" Style="white-space: nowrap; min-width: 50px">@RadiusKm km</MudText>
+        </MudStack>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+            Húzd a jelölőt az új keresési középpontra.
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Mégsem</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Confirm">Mentés</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private readonly string _mapElementId = "location-picker-map";
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public double InitialLat { get; set; }
+    [Parameter] public double InitialLng { get; set; }
+    [Parameter] public int InitialRadiusKm { get; set; }
+
+    private double _lat;
+    private double _lng;
+    private int _radiusKm;
+    private DotNetObjectReference<LocationPickerDialog>? _dotNetRef;
+
+    private int RadiusKm
+    {
+        get => _radiusKm;
+        set
+        {
+            _radiusKm = value;
+            _ = UpdateRadiusAsync(value);
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _lat = InitialLat;
+        _lng = InitialLng;
+        _radiusKm = InitialRadiusKm;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _dotNetRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("mapInterop.init",
+            _mapElementId, _lat, _lng, _radiusKm, _dotNetRef);
+    }
+
+    [JSInvokable]
+    public void OnMarkerMoved(double lat, double lng)
+    {
+        _lat = lat;
+        _lng = lng;
+    }
+
+    private async Task UpdateRadiusAsync(int radiusKm) =>
+        await JS.InvokeVoidAsync("mapInterop.updateRadius", _mapElementId, radiusKm);
+
+    private void Confirm() =>
+        MudDialog.Close(DialogResult.Ok(new LocationPreference(_lat, _lng, _radiusKm)));
+
+    private void Cancel() => MudDialog.Cancel();
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("mapInterop.destroy", _mapElementId); }
+        catch (JSDisconnectedException) { }
+        _dotNetRef?.Dispose();
+    }
+}

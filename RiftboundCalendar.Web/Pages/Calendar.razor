@@ -1,6 +1,7 @@
 @page "/"
 @inject EventApiClient ApiClient
 @inject IDialogService DialogService
+@inject LocationPreferenceService LocationPrefs
 
 <PageTitle>Riftbound Eseménynaptár</PageTitle>
 
@@ -15,14 +16,16 @@ else
 {
     <MudPaper Class="pa-4 mb-3" Elevation="1">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
-            <MudText Typo="Typo.body2" Style="white-space: nowrap">Keresési sugár:</MudText>
-            <MudSlider T="int"
-                       @bind-Value="RadiusKm"
-                       Min="10" Max="200" Step="5"
-                       ValueLabel="true"
-                       Style="flex: 1" />
-            <MudText Typo="Typo.body2">@RadiusKm km</MudText>
-            <MudText Typo="Typo.body2" Style="white-space: nowrap; min-width: 80px">
+            <MudButton Variant="Variant.Outlined"
+                       StartIcon="@Icons.Material.Filled.MyLocation"
+                       OnClick="OpenLocationPicker">
+                Keresési terület
+            </MudButton>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                @($"{_location.Lat:F4}°, {_location.Lng:F4}° — {_location.RadiusKm} km")
+            </MudText>
+            <MudSpacer />
+            <MudText Typo="Typo.body2" Style="white-space: nowrap">
                 @_items.Count esemény
             </MudText>
         </MudStack>
@@ -52,37 +55,51 @@ else
 
 @code {
     private static readonly CultureInfo _culture = new("hu-HU");
-    private const double CenterLat = 47.4979;
-    private const double CenterLng = 19.0402;
-    private const int DefaultRadiusKm = 50;
 
     private List<RiftboundCalendarItem> _allItems = [];
     private List<RiftboundCalendarItem> _items = [];
+    private LocationPreference _location = LocationPreferenceService.Default;
     private bool _loading = true;
-
-    private int _radiusKm = DefaultRadiusKm;
-    private int RadiusKm
-    {
-        get => _radiusKm;
-        set
-        {
-            _radiusKm = value;
-            _items = GeoFilter.Apply(_allItems, CenterLat, CenterLng, _radiusKm);
-        }
-    }
 
     protected override async Task OnInitializedAsync()
     {
+        _location = await LocationPrefs.GetAsync();
         _allItems = await FetchItemsAsync();
-        _items = GeoFilter.Apply(_allItems, CenterLat, CenterLng, _radiusKm);
+        _items = GeoFilter.Apply(_allItems, _location.Lat, _location.Lng, _location.RadiusKm);
         _loading = false;
+    }
+
+    private async Task OpenLocationPicker()
+    {
+        var parameters = new DialogParameters<LocationPickerDialog>
+        {
+            { x => x.InitialLat, _location.Lat },
+            { x => x.InitialLng, _location.Lng },
+            { x => x.InitialRadiusKm, _location.RadiusKm }
+        };
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+        var dialog = await DialogService.ShowAsync<LocationPickerDialog>(
+            string.Empty, parameters, options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: LocationPreference newLocation })
+        {
+            _location = newLocation;
+            await LocationPrefs.SaveAsync(newLocation);
+            _items = GeoFilter.Apply(_allItems, _location.Lat, _location.Lng, _location.RadiusKm);
+        }
     }
 
     private async Task OnDateRangeChanged()
     {
         if (_loading) return;
         _allItems = await FetchItemsAsync();
-        _items = GeoFilter.Apply(_allItems, CenterLat, CenterLng, _radiusKm);
+        _items = GeoFilter.Apply(_allItems, _location.Lat, _location.Lng, _location.RadiusKm);
     }
 
     private async Task<List<RiftboundCalendarItem>> FetchItemsAsync()
