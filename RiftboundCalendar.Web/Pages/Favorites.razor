@@ -2,6 +2,7 @@
 @inject FavoritesService FavoritesService
 @inject EventApiClient ApiClient
 @inject IDialogService DialogService
+@inject IBrowserViewportService BrowserViewport
 
 <PageTitle>Kedvenc helyszínek</PageTitle>
 
@@ -111,11 +112,12 @@ else
 
     private async Task OpenEvent(RiftboundEventDto evt)
     {
+        var isMobile = (await BrowserViewport.GetCurrentBreakpointAsync()) is Breakpoint.Xs or Breakpoint.Sm;
         var parameters = new DialogParameters<EventDetailDialog>
         {
             { x => x.Event, evt }
         };
-        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true, FullScreen = isMobile };
         await DialogService.ShowAsync<EventDetailDialog>(string.Empty, parameters, options);
     }
 

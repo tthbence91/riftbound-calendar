@@ -1,4 +1,5 @@
 @inject IDialogService DialogService
+@inject IBrowserViewportService BrowserViewport
 
 <MudDialog>
     <TitleContent>
@@ -43,11 +44,12 @@
     private async Task OpenEvent(RiftboundCalendarItem item)
     {
         MudDialog.Close();
+        var isMobile = (await BrowserViewport.GetCurrentBreakpointAsync()) is Breakpoint.Xs or Breakpoint.Sm;
         var parameters = new DialogParameters<EventDetailDialog>
         {
             { x => x.Event, item.Event }
         };
-        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true, FullScreen = isMobile };
         await DialogService.ShowAsync<EventDetailDialog>(string.Empty, parameters, options);
     }
 }
