@@ -12,17 +12,20 @@ public sealed class EventRefreshBackgroundService : BackgroundService
 {
     private readonly IEventFetcher _fetcher;
     private readonly EventCacheRepository _cache;
+    private readonly StartupReadiness _readiness;
     private readonly RiftboundOptions _options;
     private readonly ILogger<EventRefreshBackgroundService> _logger;
 
     public EventRefreshBackgroundService(
         IEventFetcher fetcher,
         EventCacheRepository cache,
+        StartupReadiness readiness,
         IOptions<RiftboundOptions> options,
         ILogger<EventRefreshBackgroundService> logger)
     {
         _fetcher = fetcher;
         _cache = cache;
+        _readiness = readiness;
         _options = options.Value;
         _logger = logger;
     }
@@ -33,6 +36,7 @@ public sealed class EventRefreshBackgroundService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var startupRetries = 0;
+        var isFirstAttempt = true;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -72,6 +76,14 @@ public sealed class EventRefreshBackgroundService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error during event refresh");
+            }
+            finally
+            {
+                if (isFirstAttempt)
+                {
+                    isFirstAttempt = false;
+                    _readiness.Signal();
+                }
             }
 
             await Task.Delay(
