@@ -7,6 +7,7 @@ public sealed record RiftboundEvent
     public DateTimeOffset EndDate { get; }
     public EventLocation Location { get; }
     public EventInfo Info { get; }
+    public EventStats Stats { get; init; } = EventStats.Empty;
 
     public RiftboundEvent(
         string id,

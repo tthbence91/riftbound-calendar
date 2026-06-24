@@ -183,7 +183,7 @@ public class RiftboundLocatorFetcherTests
         evt.Id.Should().Be("12345");
         evt.Info.Title.Should().Be("Test Tournament");
         evt.Info.Format.Should().Be("Constructed");
-        evt.Info.Url.Should().Be(new Uri("https://locator.example.com"));
+        evt.Info.Url.Should().Be(new Uri("https://locator.example.com/events/12345"));
         evt.Location.Name.Should().Be("Test Store");
         evt.Location.Latitude.Should().Be(47.5);
         evt.Location.Longitude.Should().Be(19.05);
@@ -227,13 +227,13 @@ public class RiftboundLocatorFetcherTests
     }
 
     [Fact]
-    public async Task FetchAllEventsAsync_UsesBaseUrl_WhenEventUrlIsNull()
+    public async Task FetchAllEventsAsync_ConstructsEventPageUrl_WhenEventUrlIsNull()
     {
         var sut = CreateSut(SingleEventPageJson);
 
         var result = await sut.FetchAllEventsAsync();
 
-        result[0].Info.Url.Should().Be(new Uri("https://locator.example.com"));
+        result[0].Info.Url.Should().Be(new Uri("https://locator.example.com/events/12345"));
     }
 
     [Fact]
