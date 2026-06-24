@@ -1,10 +1,12 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using RiftboundCalendar.Core.Entities;
 using RiftboundCalendar.Core.Interfaces;
 using RiftboundCalendar.Infrastructure.Caching;
 using RiftboundCalendar.Infrastructure.Configuration;
 using RiftboundCalendar.Infrastructure.Filtering;
+using RiftboundCalendar.Infrastructure.Notifications;
 
 namespace RiftboundCalendar.Infrastructure.BackgroundServices;
 
@@ -13,30 +15,34 @@ public sealed class EventRefreshBackgroundService : BackgroundService
     private readonly IEventFetcher _fetcher;
     private readonly EventCacheRepository _cache;
     private readonly StartupReadiness _readiness;
+    private readonly DiscordNotifier _notifier;
     private readonly RiftboundOptions _options;
     private readonly ILogger<EventRefreshBackgroundService> _logger;
+
+    private static readonly TimeSpan StartupRetryDelay = TimeSpan.FromSeconds(45);
+    private const int MaxStartupRetries = 4;
 
     public EventRefreshBackgroundService(
         IEventFetcher fetcher,
         EventCacheRepository cache,
         StartupReadiness readiness,
+        DiscordNotifier notifier,
         IOptions<RiftboundOptions> options,
         ILogger<EventRefreshBackgroundService> logger)
     {
         _fetcher = fetcher;
         _cache = cache;
         _readiness = readiness;
+        _notifier = notifier;
         _options = options.Value;
         _logger = logger;
     }
-
-    private static readonly TimeSpan StartupRetryDelay = TimeSpan.FromSeconds(45);
-    private const int MaxStartupRetries = 4;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var startupRetries = 0;
         var isFirstAttempt = true;
+        HashSet<string>? seenEventIds = null;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -51,6 +57,12 @@ public sealed class EventRefreshBackgroundService : BackgroundService
 
                 if (filtered.Count > 0)
                 {
+                    var currentIds = filtered.Select(e => e.Id).ToHashSet();
+
+                    if (seenEventIds is not null)
+                        await NotifyNewEventsAsync(filtered, seenEventIds, stoppingToken);
+
+                    seenEventIds = currentIds;
                     _cache.UpdateCache(filtered);
                     startupRetries = 0;
                 }
@@ -91,5 +103,17 @@ public sealed class EventRefreshBackgroundService : BackgroundService
                     stoppingToken)
                 .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         }
+    }
+
+    private async Task NotifyNewEventsAsync(
+        IReadOnlyList<RiftboundEvent> current,
+        HashSet<string> seenIds,
+        CancellationToken ct)
+    {
+        var newEvents = current.Where(e => !seenIds.Contains(e.Id)).ToList();
+        if (newEvents.Count == 0) return;
+
+        _logger.LogInformation("Notifying {Count} new event(s) via Discord", newEvents.Count);
+        await _notifier.NotifyNewEventsAsync(newEvents, ct);
     }
 }

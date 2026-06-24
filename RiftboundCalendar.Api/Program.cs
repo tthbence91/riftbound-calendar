@@ -4,11 +4,15 @@ using RiftboundCalendar.Infrastructure.BackgroundServices;
 using RiftboundCalendar.Infrastructure.Caching;
 using RiftboundCalendar.Infrastructure.Configuration;
 using RiftboundCalendar.Infrastructure.Fetching;
+using RiftboundCalendar.Infrastructure.Notifications;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<RiftboundOptions>(
     builder.Configuration.GetSection(RiftboundOptions.SectionName));
+builder.Services.Configure<DiscordOptions>(
+    builder.Configuration.GetSection(DiscordOptions.SectionName));
+builder.Services.AddSingleton<DiscordNotifier>();
 
 var allowedOrigins = builder.Configuration
     .GetSection("AllowedOrigins").Get<string[]>() ?? [];

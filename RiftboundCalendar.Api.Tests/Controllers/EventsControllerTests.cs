@@ -9,6 +9,7 @@ using RiftboundCalendar.Api.Controllers;
 using RiftboundCalendar.Api.Dtos;
 using RiftboundCalendar.Core.Entities;
 using RiftboundCalendar.Core.Interfaces;
+using RiftboundCalendar.Infrastructure.Caching;
 
 namespace RiftboundCalendar.Api.Tests.Controllers;
 
@@ -27,7 +28,7 @@ public class EventsControllerUnitTests
         var mockRepo = new Mock<IEventRepository>();
         mockRepo.Setup(r => r.GetEventsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([SampleEvent]);
-        var controller = new EventsController(mockRepo.Object);
+        var controller = new EventsController(mockRepo.Object, CreateSignaledReadiness());
 
         var result = await controller.GetEvents(CancellationToken.None);
 
@@ -44,13 +45,20 @@ public class EventsControllerUnitTests
         var mockRepo = new Mock<IEventRepository>();
         mockRepo.Setup(r => r.GetEventsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        var controller = new EventsController(mockRepo.Object);
+        var controller = new EventsController(mockRepo.Object, CreateSignaledReadiness());
 
         var result = await controller.GetEvents(CancellationToken.None);
 
         var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         ok.Value.Should().BeAssignableTo<IList<RiftboundEventDto>>()
             .Which.Should().BeEmpty();
+    }
+
+    private static StartupReadiness CreateSignaledReadiness()
+    {
+        var r = new StartupReadiness();
+        r.Signal();
+        return r;
     }
 }
 
