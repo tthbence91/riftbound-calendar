@@ -5,9 +5,11 @@ using Microsoft.Extensions.Options;
 using Moq;
 using RiftboundCalendar.Core.Entities;
 using RiftboundCalendar.Core.Interfaces;
+using Microsoft.Extensions.Http;
 using RiftboundCalendar.Infrastructure.BackgroundServices;
 using RiftboundCalendar.Infrastructure.Caching;
 using RiftboundCalendar.Infrastructure.Configuration;
+using RiftboundCalendar.Infrastructure.Notifications;
 
 namespace RiftboundCalendar.Infrastructure.Tests.BackgroundServices;
 
@@ -97,8 +99,17 @@ public class EventRefreshBackgroundServiceTests : IDisposable
     }
 
     private EventRefreshBackgroundService CreateSut() =>
-        new(_mockFetcher.Object, _cacheRepo, new StartupReadiness(), _options,
+        new(_mockFetcher.Object, _cacheRepo, new StartupReadiness(),
+            CreateNullDiscordNotifier(), _options,
             NullLogger<EventRefreshBackgroundService>.Instance);
+
+    private static DiscordNotifier CreateNullDiscordNotifier()
+    {
+        var factory = new Mock<IHttpClientFactory>();
+        factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(new HttpClient());
+        var options = Options.Create(new DiscordOptions());
+        return new DiscordNotifier(factory.Object, options, NullLogger<DiscordNotifier>.Instance);
+    }
 
     private static RiftboundEvent CreateEvent(string id, double lat, double lng) =>
         new(id, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2),
