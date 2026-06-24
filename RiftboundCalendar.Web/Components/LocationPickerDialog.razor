@@ -15,7 +15,7 @@
                              Style="max-width: 160px" />
         </MudStack>
         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
-            Húzd a jelölőt az új keresési középpontra.
+            Húzd a kék pontot a sugár változtatásához, a jelölőt a középpont áthelyezéséhez.
         </MudText>
     </DialogContent>
     <DialogActions>
@@ -68,6 +68,13 @@
     {
         _lat = lat;
         _lng = lng;
+    }
+
+    [JSInvokable]
+    public void OnRadiusChanged(int radiusKm)
+    {
+        _radiusKm = radiusKm;
+        InvokeAsync(StateHasChanged);
     }
 
     private async Task UpdateRadiusAsync(int radiusKm) =>
