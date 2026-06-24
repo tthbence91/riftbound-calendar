@@ -12,7 +12,7 @@ public sealed class RiftboundEventDto
     public string Format { get; init; } = "";
     public string Url { get; init; } = "";
     public string? StoreId { get; init; }
-    public string? QueueStatus { get; init; }
+    public string? LifecycleStatus { get; init; }
     public int? CostInCents { get; init; }
     public string? Currency { get; init; }
     public int? Capacity { get; init; }
