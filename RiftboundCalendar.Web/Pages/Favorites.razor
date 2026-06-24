@@ -1,0 +1,128 @@
+@page "/kedvencek"
+@inject FavoritesService FavoritesService
+@inject EventApiClient ApiClient
+@inject IDialogService DialogService
+
+<PageTitle>Kedvenc helyszínek</PageTitle>
+
+@if (_loading)
+{
+    <MudStack AlignItems="AlignItems.Center" Class="mt-16">
+        <MudProgressCircular Indeterminate="true" Size="Size.Large" Color="Color.Primary" />
+        <MudText Typo="Typo.body1" Class="mt-2">Betöltés...</MudText>
+    </MudStack>
+}
+else if (_favoriteLocations.Count == 0)
+{
+    <MudStack AlignItems="AlignItems.Center" Class="mt-16" Spacing="2">
+        <MudIcon Icon="@Icons.Material.Outlined.StarBorder" Style="font-size:4rem" Color="Color.Secondary" />
+        <MudText Typo="Typo.h6" Color="Color.Secondary">Még nincsenek kedvenc helyszíneid</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Nyiss meg egy eseményt a naptárban, és kattints a csillag ikonra a helyszín mentéséhez.
+        </MudText>
+    </MudStack>
+}
+else
+{
+    <MudStack Spacing="4">
+        @foreach (var location in _favoriteLocations)
+        {
+            <MudCard Elevation="2">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Star" Color="Color.Warning" Size="Size.Small" />
+                            <MudText Typo="Typo.h6">@location.StoreName</MudText>
+                        </MudStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <MudTooltip Text="Eltávolítás a kedvencekből">
+                            <MudIconButton Icon="@Icons.Material.Filled.StarBorder"
+                                           Color="Color.Default"
+                                           OnClick="() => RemoveFavorite(location.StoreId)" />
+                        </MudTooltip>
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent Class="pt-0">
+                    @{
+                        var events = GetEventsForLocation(location.StoreId);
+                    }
+                    @if (events.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="ml-1">
+                            Nincs közelgő esemény ezen a helyszínen.
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudList T="RiftboundEventDto" Dense="true">
+                            @foreach (var evt in events)
+                            {
+                                <MudListItem T="RiftboundEventDto" OnClick="() => OpenEvent(evt)"
+                                             Style="cursor:pointer">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudIcon Icon="@Icons.Material.Filled.Event"
+                                                 Color="Color.Primary" Size="Size.Small" />
+                                        <MudStack Spacing="0">
+                                            <MudText Typo="Typo.body2">@evt.Title</MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @FormatEventDate(evt)
+                                            </MudText>
+                                        </MudStack>
+                                    </MudStack>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    }
+                </MudCardContent>
+            </MudCard>
+        }
+    </MudStack>
+}
+
+@code {
+    private static readonly CultureInfo HunCulture = new("hu-HU");
+    private bool _loading = true;
+    private List<FavoriteLocation> _favoriteLocations = [];
+    private List<RiftboundEventDto> _allEvents = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var favoritesTask = FavoritesService.GetAllAsync();
+        var eventsTask = ApiClient.GetEventsAsync();
+        await Task.WhenAll(favoritesTask, eventsTask);
+
+        _favoriteLocations = (await favoritesTask).OrderBy(f => f.StoreName).ToList();
+        _allEvents = [.. await eventsTask];
+        _loading = false;
+    }
+
+    private List<RiftboundEventDto> GetEventsForLocation(string storeId) =>
+        _allEvents
+            .Where(e => e.StoreId == storeId)
+            .OrderBy(e => e.StartDate)
+            .ToList();
+
+    private async Task RemoveFavorite(string storeId)
+    {
+        await FavoritesService.RemoveAsync(storeId);
+        _favoriteLocations.RemoveAll(f => f.StoreId == storeId);
+    }
+
+    private async Task OpenEvent(RiftboundEventDto evt)
+    {
+        var parameters = new DialogParameters<EventDetailDialog>
+        {
+            { x => x.Event, evt }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        await DialogService.ShowAsync<EventDetailDialog>(string.Empty, parameters, options);
+    }
+
+    private static string FormatEventDate(RiftboundEventDto evt)
+    {
+        var start = evt.StartDate.LocalDateTime;
+        var end = evt.EndDate.LocalDateTime;
+        return $"{start.ToString("MMM d., dddd", HunCulture)}, {start:HH:mm}–{end:HH:mm}";
+    }
+}

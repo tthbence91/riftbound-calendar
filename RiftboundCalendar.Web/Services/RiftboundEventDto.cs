@@ -11,6 +11,7 @@ public sealed class RiftboundEventDto
     public double Longitude { get; init; }
     public string Format { get; init; } = "";
     public string Url { get; init; } = "";
+    public string? StoreId { get; init; }
     public int? CostInCents { get; init; }
     public string? Currency { get; init; }
     public int? Capacity { get; init; }

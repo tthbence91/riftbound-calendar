@@ -20,5 +20,6 @@ builder.Services.AddHttpClient<EventApiClient>(client =>
     client.BaseAddress = new Uri(baseAddress));
 
 builder.Services.AddMudServices();
+builder.Services.AddSingleton<FavoritesService>();
 
 await builder.Build().RunAsync();

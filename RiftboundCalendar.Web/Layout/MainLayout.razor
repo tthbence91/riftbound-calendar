@@ -1,4 +1,4 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 
 <MudThemeProvider />
 <MudPopoverProvider />
@@ -7,7 +7,12 @@
 
 <MudLayout>
     <MudAppBar Elevation="1" Color="Color.Primary" Dense="true">
-        <MudText Typo="Typo.h6">Riftbound Eseménynaptár</MudText>
+        <MudText Typo="Typo.h6" Class="mr-4">Riftbound Eseménynaptár</MudText>
+        <MudSpacer />
+        <MudButton Href="/" StartIcon="@Icons.Material.Filled.CalendarMonth"
+                   Color="Color.Inherit" Variant="Variant.Text">Naptár</MudButton>
+        <MudButton Href="/kedvencek" StartIcon="@Icons.Material.Filled.Star"
+                   Color="Color.Inherit" Variant="Variant.Text">Kedvencek</MudButton>
     </MudAppBar>
     <MudMainContent>
         <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">

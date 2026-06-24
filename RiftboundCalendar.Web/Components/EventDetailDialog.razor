@@ -1,3 +1,5 @@
+@inject FavoritesService FavoritesService
+
 <MudDialog>
     <TitleContent>
         <MudText Typo="Typo.h6">@Event.Title</MudText>
@@ -36,6 +38,15 @@
         </MudStack>
     </DialogContent>
     <DialogActions>
+        @if (Event.StoreId is not null)
+        {
+            <MudTooltip Text="@(_isFavorite ? "Eltávolítás a kedvencekből" : "Helyszín hozzáadása a kedvencekhez")">
+                <MudIconButton Icon="@(_isFavorite ? Icons.Material.Filled.Star : Icons.Material.Outlined.StarBorder)"
+                               Color="@(_isFavorite ? Color.Warning : Color.Default)"
+                               OnClick="ToggleFavorite" />
+            </MudTooltip>
+        }
+        <MudSpacer />
         <MudButton Href="@Event.Url" Target="_blank" Color="Color.Primary" Variant="Variant.Filled"
                    StartIcon="@Icons.Material.Filled.OpenInNew">
             Esemény oldala
@@ -49,6 +60,20 @@
     [Parameter] public RiftboundEventDto Event { get; set; } = null!;
 
     private static readonly CultureInfo HunCulture = new("hu-HU");
+    private bool _isFavorite;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Event.StoreId is not null)
+            _isFavorite = await FavoritesService.IsFavoriteAsync(Event.StoreId);
+    }
+
+    private async Task ToggleFavorite()
+    {
+        if (Event.StoreId is null) return;
+        await FavoritesService.ToggleAsync(Event.StoreId, Event.LocationName);
+        _isFavorite = !_isFavorite;
+    }
 
     private string MapUrl => BuildMapUrl(Event.Latitude, Event.Longitude);
 
