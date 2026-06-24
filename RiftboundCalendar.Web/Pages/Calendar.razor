@@ -92,7 +92,7 @@ else
         {
             Start = e.StartDate.LocalDateTime,
             End = e.EndDate.LocalDateTime,
-            Text = e.Title,
+            Text = StatusPrefix(RegistrationStatusHelper.Get(e)) + e.Title,
             Event = e
         }).ToList();
     }
@@ -112,6 +112,14 @@ else
         var options = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseOnEscapeKey = true };
         await DialogService.ShowAsync<DayEventsDialog>(string.Empty, parameters, options);
     }
+
+    private static string StatusPrefix(RegistrationStatus status) => status switch
+    {
+        RegistrationStatus.Open   => "🟢 ",
+        RegistrationStatus.Full   => "🔴 ",
+        RegistrationStatus.Closed => "🔒 ",
+        _                         => ""
+    };
 
     private async Task OnItemClicked(RiftboundCalendarItem item)
     {

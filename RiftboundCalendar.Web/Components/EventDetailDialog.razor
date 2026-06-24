@@ -18,6 +18,10 @@
                 <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Primary" />
                 <MudText>@FormatDateRange()</MudText>
             </MudStack>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudIcon Icon="@StatusIcon" Color="@StatusColor" />
+                <MudText Color="@StatusColor">@StatusLabel</MudText>
+            </MudStack>
             @if (Event.CostInCents.HasValue)
             {
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
@@ -61,6 +65,32 @@
 
     private static readonly CultureInfo HunCulture = new("hu-HU");
     private bool _isFavorite;
+
+    private RegistrationStatus Status => RegistrationStatusHelper.Get(Event);
+
+    private string StatusIcon => Status switch
+    {
+        RegistrationStatus.Open   => Icons.Material.Filled.HowToReg,
+        RegistrationStatus.Full   => Icons.Material.Filled.GroupOff,
+        RegistrationStatus.Closed => Icons.Material.Filled.Lock,
+        _                         => Icons.Material.Filled.Help
+    };
+
+    private Color StatusColor => Status switch
+    {
+        RegistrationStatus.Open   => Color.Success,
+        RegistrationStatus.Full   => Color.Error,
+        RegistrationStatus.Closed => Color.Error,
+        _                         => Color.Default
+    };
+
+    private string StatusLabel => Status switch
+    {
+        RegistrationStatus.Open   => "Regisztráció nyitva",
+        RegistrationStatus.Full   => "Betelt",
+        RegistrationStatus.Closed => "Regisztráció még nem nyitott",
+        _                         => ""
+    };
 
     protected override async Task OnInitializedAsync()
     {
