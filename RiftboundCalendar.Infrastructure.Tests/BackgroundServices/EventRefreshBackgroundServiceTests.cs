@@ -97,7 +97,7 @@ public class EventRefreshBackgroundServiceTests : IDisposable
     }
 
     private EventRefreshBackgroundService CreateSut() =>
-        new(_mockFetcher.Object, _cacheRepo, _options,
+        new(_mockFetcher.Object, _cacheRepo, new StartupReadiness(), _options,
             NullLogger<EventRefreshBackgroundService>.Instance);
 
     private static RiftboundEvent CreateEvent(string id, double lat, double lng) =>

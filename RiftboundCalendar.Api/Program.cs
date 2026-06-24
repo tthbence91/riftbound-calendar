@@ -17,6 +17,7 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
 
 builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<StartupReadiness>();
 builder.Services.AddSingleton<EventCacheRepository>();
 builder.Services.AddSingleton<IEventRepository>(
     sp => sp.GetRequiredService<EventCacheRepository>());
