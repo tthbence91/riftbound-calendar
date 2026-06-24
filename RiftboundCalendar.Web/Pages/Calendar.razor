@@ -14,20 +14,24 @@
 }
 else
 {
-    <MudPaper Class="pa-4 mb-3" Elevation="1">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
+    <MudPaper Class="pa-3 mb-3" Elevation="1">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
             <MudButton Variant="Variant.Outlined"
                        StartIcon="@Icons.Material.Filled.MyLocation"
+                       Size="Size.Small"
                        OnClick="OpenLocationPicker">
                 Keresési terület
             </MudButton>
-            <MudText Typo="Typo.body2" Color="Color.Secondary">
-                @($"{_location.Lat:F4}°, {_location.Lng:F4}° — {_location.RadiusKm} km")
-            </MudText>
+            <MudHidden Breakpoint="Breakpoint.SmAndDown">
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    @($"{_location.Lat:F4}°, {_location.Lng:F4}° — {_location.RadiusKm} km")
+                </MudText>
+            </MudHidden>
+            <MudHidden Breakpoint="Breakpoint.MdAndUp">
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@_location.RadiusKm km</MudText>
+            </MudHidden>
             <MudSpacer />
-            <MudText Typo="Typo.body2" Style="white-space: nowrap">
-                @_items.Count esemény
-            </MudText>
+            <MudText Typo="Typo.body2" Style="white-space: nowrap">@_items.Count esemény</MudText>
         </MudStack>
     </MudPaper>
 
@@ -39,17 +43,52 @@ else
     }
     else
     {
-        <MudCalendar T="RiftboundCalendarItem"
-                     Items="_items"
-                     Culture="_culture"
-                     View="CalendarView.Month"
-                     FirstDayOfWeek="DayOfWeek.Monday"
-                     ShowDay="false"
-                     ShowWorkWeek="false"
-                     Height="700"
-                     ItemClicked="OnItemClicked"
-                     MoreClicked="OnMoreClicked"
-                     DateRangeChanged="OnDateRangeChanged" />
+        <MudHidden Breakpoint="Breakpoint.SmAndDown">
+            <MudCalendar T="RiftboundCalendarItem"
+                         Items="_items"
+                         Culture="_culture"
+                         View="CalendarView.Month"
+                         FirstDayOfWeek="DayOfWeek.Monday"
+                         ShowDay="false"
+                         ShowWorkWeek="false"
+                         Height="700"
+                         ItemClicked="OnItemClicked"
+                         MoreClicked="OnMoreClicked"
+                         DateRangeChanged="OnDateRangeChanged" />
+        </MudHidden>
+
+        <MudHidden Breakpoint="Breakpoint.MdAndUp">
+            @foreach (var group in UpcomingByDate)
+            {
+                <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="mt-4 mb-1 px-1">
+                    @FormatGroupDate(group.Key)
+                </MudText>
+                <MudDivider Class="mb-2" />
+                @foreach (var item in group)
+                {
+                    <MudPaper Class="mb-2 pa-3" Elevation="1" Style="cursor: pointer"
+                              @onclick="() => OnItemClicked(item)">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudStack Spacing="0" Style="flex: 1; min-width: 0">
+                                <MudText Typo="Typo.body1" Style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">
+                                    @item.Text
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @($"{item.Start:HH:mm} – {item.End:HH:mm} · {item.Event.LocationName}")
+                                </MudText>
+                            </MudStack>
+                            <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Color="Color.Default" Size="Size.Small" />
+                        </MudStack>
+                    </MudPaper>
+                }
+            }
+            @if (!UpcomingByDate.Any())
+            {
+                <MudStack AlignItems="AlignItems.Center" Class="mt-8">
+                    <MudText Typo="Typo.body1" Color="Color.Secondary">Nincs közelgő esemény a területen.</MudText>
+                </MudStack>
+            }
+        </MudHidden>
     }
 }
 
@@ -60,6 +99,12 @@ else
     private List<RiftboundCalendarItem> _items = [];
     private LocationPreference _location = LocationPreferenceService.Default;
     private bool _loading = true;
+
+    private IEnumerable<IGrouping<DateTime, RiftboundCalendarItem>> UpcomingByDate =>
+        _items
+            .Where(i => i.Start.Date >= DateTime.Today)
+            .OrderBy(i => i.Start)
+            .GroupBy(i => i.Start.Date);
 
     protected override async Task OnInitializedAsync()
     {
@@ -129,6 +174,9 @@ else
         var options = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseOnEscapeKey = true };
         await DialogService.ShowAsync<DayEventsDialog>(string.Empty, parameters, options);
     }
+
+    private string FormatGroupDate(DateTime date) =>
+        date.ToString("yyyy. MMMM d., dddd", _culture);
 
     private static string StatusPrefix(RegistrationStatus status) => status switch
     {
