@@ -111,6 +111,38 @@ code {
     }
 }
 
+.mobile-bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    display: flex;
+    align-items: stretch;
+    z-index: 1300;
+    background-color: var(--mud-palette-primary);
+}
+
+.mobile-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.65);
+    text-decoration: none;
+    font-size: 0.7rem;
+    gap: 2px;
+}
+
+.mobile-nav-item.active {
+    color: white;
+}
+
+.mobile-nav-item .mud-icon-root {
+    font-size: 1.5rem;
+}
+
 .form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
     color: var(--bs-secondary-color);
     text-align: end;
