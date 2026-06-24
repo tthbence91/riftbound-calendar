@@ -9,7 +9,7 @@ public sealed class LocationPreferenceService(IJSRuntime js)
 {
     private const string StorageKey = "riftbound_location";
 
-    public static readonly LocationPreference Default = new(47.4979, 19.0402, 50);
+    public static readonly LocationPreference Default = new(47.4979, 19.0402, 150);
 
     private LocationPreference? _cache;
 
