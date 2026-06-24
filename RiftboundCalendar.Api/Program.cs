@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.StaticFiles;
 using RiftboundCalendar.Core.Interfaces;
 using RiftboundCalendar.Infrastructure.BackgroundServices;
 using RiftboundCalendar.Infrastructure.Caching;
+using RiftboundCalendar.Infrastructure.Notifications;
 using RiftboundCalendar.Infrastructure.Configuration;
 using RiftboundCalendar.Infrastructure.Fetching;
 using RiftboundCalendar.Infrastructure.Notifications;
@@ -22,6 +23,7 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<StartupReadiness>();
+builder.Services.AddSingleton<EventRefreshObservers>();
 builder.Services.AddSingleton<EventCacheRepository>();
 builder.Services.AddSingleton<IEventRepository>(
     sp => sp.GetRequiredService<EventCacheRepository>());

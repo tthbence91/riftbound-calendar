@@ -99,16 +99,18 @@ public class EventRefreshBackgroundServiceTests : IDisposable
     }
 
     private EventRefreshBackgroundService CreateSut() =>
-        new(_mockFetcher.Object, _cacheRepo, new StartupReadiness(),
-            CreateNullDiscordNotifier(), _options,
+        new(_mockFetcher.Object, _cacheRepo, CreateNullObservers(), _options,
             NullLogger<EventRefreshBackgroundService>.Instance);
 
-    private static DiscordNotifier CreateNullDiscordNotifier()
+    private static EventRefreshObservers CreateNullObservers()
     {
         var factory = new Mock<IHttpClientFactory>();
         factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(new HttpClient());
-        var options = Options.Create(new DiscordOptions());
-        return new DiscordNotifier(factory.Object, options, NullLogger<DiscordNotifier>.Instance);
+        var notifier = new DiscordNotifier(
+            factory.Object,
+            Options.Create(new DiscordOptions()),
+            NullLogger<DiscordNotifier>.Instance);
+        return new EventRefreshObservers(new StartupReadiness(), notifier);
     }
 
     private static RiftboundEvent CreateEvent(string id, double lat, double lng) =>
