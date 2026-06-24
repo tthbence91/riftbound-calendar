@@ -47,6 +47,17 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.UseHttpsRedirection();
+    app.MapPost("/api/debug/notify-discord", async (
+        IEventRepository repo,
+        DiscordNotifier notifier,
+        CancellationToken ct) =>
+    {
+        var events = await repo.GetEventsAsync(ct);
+        if (events.Count == 0)
+            return Results.Ok(new { sent = 0, message = "No cached events." });
+        await notifier.NotifyNewEventsAsync(events, ct);
+        return Results.Ok(new { sent = events.Count });
+    });
 }
 
 var contentTypeProvider = new FileExtensionContentTypeProvider();
