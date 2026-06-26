@@ -23,8 +23,7 @@ public sealed class EventRefreshBackgroundService : BackgroundService
 
     private bool _isFirstAttempt = true;
     private int _startupRetries;
-    private HashSet<string>? _seenEventIds;
-    private Dictionary<string, RegistrationStatus>? _seenStatuses;
+    private IReadOnlyDictionary<string, RegistrationStatus>? _previousStates;
 
     public EventRefreshBackgroundService(
         IEventFetcher fetcher,
@@ -42,6 +41,8 @@ public sealed class EventRefreshBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _previousStates = await LoadStateAsync(stoppingToken);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             var retry = await RunOneCycleAsync(stoppingToken);
@@ -50,6 +51,19 @@ public sealed class EventRefreshBackgroundService : BackgroundService
                         TimeSpan.FromMinutes(_options.RefreshIntervalMinutes),
                         stoppingToken)
                     .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        }
+    }
+
+    private async Task<IReadOnlyDictionary<string, RegistrationStatus>> LoadStateAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await _observers.StateRepository.LoadAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load notification state from DB — starting fresh");
+            return new Dictionary<string, RegistrationStatus>();
         }
     }
 
@@ -66,14 +80,16 @@ public sealed class EventRefreshBackgroundService : BackgroundService
 
             if (filtered.Count > 0)
             {
-                if (_seenEventIds is not null)
+                if (_previousStates!.Count > 0)
                 {
-                    await NotifyNewEventsAsync(filtered, _seenEventIds, stoppingToken);
-                    await NotifyStatusChangesAsync(filtered, _seenStatuses!, stoppingToken);
+                    await NotifyNewEventsAsync(filtered, _previousStates, stoppingToken);
+                    await NotifyStatusChangesAsync(filtered, _previousStates, stoppingToken);
                 }
 
-                _seenEventIds = filtered.Select(e => e.Id).ToHashSet();
-                _seenStatuses = filtered.ToDictionary(e => e.Id, e => e.Stats.GetRegistrationStatus());
+                var newStates = filtered.ToDictionary(e => e.Id, e => e.Stats.GetRegistrationStatus());
+                await SaveStateAsync(newStates, stoppingToken);
+                _previousStates = newStates;
+
                 _cache.UpdateCache(filtered);
                 _startupRetries = 0;
                 return false;
@@ -112,12 +128,24 @@ public sealed class EventRefreshBackgroundService : BackgroundService
         }
     }
 
+    private async Task SaveStateAsync(Dictionary<string, RegistrationStatus> states, CancellationToken ct)
+    {
+        try
+        {
+            await _observers.StateRepository.SaveAsync(states, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save notification state to DB");
+        }
+    }
+
     private async Task NotifyNewEventsAsync(
         IReadOnlyList<RiftboundEvent> current,
-        HashSet<string> seenIds,
+        IReadOnlyDictionary<string, RegistrationStatus> previousStates,
         CancellationToken ct)
     {
-        var newEvents = current.Where(e => !seenIds.Contains(e.Id)).ToList();
+        var newEvents = current.Where(e => !previousStates.ContainsKey(e.Id)).ToList();
         if (newEvents.Count == 0) return;
 
         _logger.LogInformation("Notifying {Count} new event(s) via Discord", newEvents.Count);
@@ -126,14 +154,14 @@ public sealed class EventRefreshBackgroundService : BackgroundService
 
     private async Task NotifyStatusChangesAsync(
         IReadOnlyList<RiftboundEvent> current,
-        Dictionary<string, RegistrationStatus> previousStatuses,
+        IReadOnlyDictionary<string, RegistrationStatus> previousStates,
         CancellationToken ct)
     {
         var changes = current
-            .Where(e => previousStatuses.TryGetValue(e.Id, out var prev)
+            .Where(e => previousStates.TryGetValue(e.Id, out var prev)
                         && prev != e.Stats.GetRegistrationStatus()
                         && e.Stats.GetRegistrationStatus() == RegistrationStatus.Open)
-            .Select(e => new StatusChange(e, previousStatuses[e.Id], e.Stats.GetRegistrationStatus()))
+            .Select(e => new StatusChange(e, previousStates[e.Id], e.Stats.GetRegistrationStatus()))
             .ToList();
 
         if (changes.Count == 0) return;

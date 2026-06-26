@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.StaticFiles;
+using Microsoft.EntityFrameworkCore;
 using RiftboundCalendar.Core.Interfaces;
 using RiftboundCalendar.Infrastructure.BackgroundServices;
 using RiftboundCalendar.Infrastructure.Caching;
 using RiftboundCalendar.Infrastructure.Configuration;
 using RiftboundCalendar.Infrastructure.Fetching;
 using RiftboundCalendar.Infrastructure.Notifications;
+using RiftboundCalendar.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,6 +15,9 @@ builder.Services.Configure<RiftboundOptions>(
 builder.Services.Configure<DiscordOptions>(
     builder.Configuration.GetSection(DiscordOptions.SectionName));
 builder.Services.AddSingleton<IEventNotifier, DiscordNotifier>();
+builder.Services.AddDbContextFactory<RiftboundDbContext>(o =>
+    o.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddSingleton<INotificationStateRepository, NotificationStateRepository>();
 
 var allowedOrigins = builder.Configuration
     .GetSection("AllowedOrigins").Get<string[]>() ?? [];
@@ -43,6 +48,12 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<RiftboundDbContext>();
+    await db.Database.MigrateAsync();
+}
 
 if (app.Environment.IsDevelopment())
 {

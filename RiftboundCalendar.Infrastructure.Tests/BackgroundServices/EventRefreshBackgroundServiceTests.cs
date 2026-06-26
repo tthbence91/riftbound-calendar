@@ -8,6 +8,7 @@ using RiftboundCalendar.Core.Interfaces;
 using RiftboundCalendar.Infrastructure.BackgroundServices;
 using RiftboundCalendar.Infrastructure.Caching;
 using RiftboundCalendar.Infrastructure.Configuration;
+using IReadOnlyDict = System.Collections.Generic.IReadOnlyDictionary<string, RiftboundCalendar.Core.Entities.RegistrationStatus>;
 
 namespace RiftboundCalendar.Infrastructure.Tests.BackgroundServices;
 
@@ -15,6 +16,7 @@ public class EventRefreshBackgroundServiceTests : IDisposable
 {
     private readonly Mock<IEventFetcher> _mockFetcher = new();
     private readonly Mock<IEventNotifier> _mockNotifier = new();
+    private readonly Mock<INotificationStateRepository> _mockStateRepo = new();
     private readonly IMemoryCache _memoryCache = new MemoryCache(Options.Create(new MemoryCacheOptions()));
     private readonly EventCacheRepository _cacheRepo;
 
@@ -29,6 +31,12 @@ public class EventRefreshBackgroundServiceTests : IDisposable
     public EventRefreshBackgroundServiceTests()
     {
         _cacheRepo = new EventCacheRepository(_memoryCache);
+        _mockStateRepo
+            .Setup(r => r.LoadAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, RegistrationStatus>());
+        _mockStateRepo
+            .Setup(r => r.SaveAsync(It.IsAny<IReadOnlyDict>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
     }
 
     [Fact]
@@ -179,7 +187,7 @@ public class EventRefreshBackgroundServiceTests : IDisposable
 
     private EventRefreshBackgroundService CreateSut() =>
         new(_mockFetcher.Object, _cacheRepo,
-            new EventRefreshObservers(new StartupReadiness(), _mockNotifier.Object),
+            new EventRefreshObservers(new StartupReadiness(), _mockNotifier.Object, _mockStateRepo.Object),
             _options, NullLogger<EventRefreshBackgroundService>.Instance);
 
     private (EventRefreshBackgroundService sut, TaskCompletionSource secondCycleTcs) CreateTwoCycleSut(
@@ -204,7 +212,7 @@ public class EventRefreshBackgroundServiceTests : IDisposable
 
         var sut = new EventRefreshBackgroundService(
             _mockFetcher.Object, _cacheRepo,
-            new EventRefreshObservers(new StartupReadiness(), _mockNotifier.Object),
+            new EventRefreshObservers(new StartupReadiness(), _mockNotifier.Object, _mockStateRepo.Object),
             Options.Create(new RiftboundOptions
             {
                 RefreshIntervalMinutes = 0,

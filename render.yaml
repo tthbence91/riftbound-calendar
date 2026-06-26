@@ -3,9 +3,14 @@ services:
     name: tthbence-riftbound
     runtime: docker
     plan: free
+    region: frankfurt
     healthCheckPath: /
     envVars:
       - key: PORT
-        value: 8080
+        value: "8080"
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
+      - key: Discord__WebhookUrl
+        sync: false
+      - key: ConnectionStrings__DefaultConnection
+        sync: false
