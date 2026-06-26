@@ -3,11 +3,13 @@ using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using RiftboundCalendar.Api.Dtos;
 using RiftboundCalendar.Core.Entities;
 using RiftboundCalendar.Core.Interfaces;
+using RiftboundCalendar.Infrastructure.Persistence;
 
 namespace RiftboundCalendar.Api.Tests.Integration;
 
@@ -15,6 +17,15 @@ namespace RiftboundCalendar.Api.Tests.Integration;
 /// Full pipeline tests: stub fetcher → real BackgroundService → real HaversineFilter
 /// → real EventCacheRepository → real EventsController → HTTP response.
 /// Verifies the end-to-end wiring that unit tests cannot cover.
+///
+/// IMPORTANT — test isolation: WebApplicationFactory starts the full application including
+/// all hosted services. Every external infrastructure service MUST be overridden in
+/// CreateFactory to prevent side effects:
+///   • IEventFetcher       → SignalingStubFetcher  (controlled test data, no real HTTP)
+///   • IEventNotifier      → NoOpEventNotifier     (no real Discord webhook calls)
+///   • INotificationStateRepository → InMemoryNotificationStateRepository (no real DB)
+///   • IDbContextFactory   → InMemory EF provider  (no real DB connection on startup migration)
+/// Failing to override any of these will cause real side effects during test runs.
 /// </summary>
 public class EventPipelineIntegrationTests
 {
@@ -124,8 +135,29 @@ public class EventPipelineIntegrationTests
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.ConfigureServices(services =>
+            {
                 services.AddSingleton<IEventFetcher>(
-                    new SignalingStubFetcher(events, onFetched)));
+                    new SignalingStubFetcher(events, onFetched));
+
+                var notifierDescriptor = services.SingleOrDefault(
+                    d => d.ServiceType == typeof(IEventNotifier));
+                if (notifierDescriptor != null) services.Remove(notifierDescriptor);
+                services.AddSingleton<IEventNotifier, NoOpEventNotifier>();
+
+                var stateRepoDescriptor = services.SingleOrDefault(
+                    d => d.ServiceType == typeof(INotificationStateRepository));
+                if (stateRepoDescriptor != null) services.Remove(stateRepoDescriptor);
+                services.AddSingleton<INotificationStateRepository, InMemoryNotificationStateRepository>();
+
+                var dbDescriptors = services
+                    .Where(d => d.ServiceType == typeof(IDbContextFactory<RiftboundDbContext>) ||
+                                d.ServiceType == typeof(RiftboundDbContext) ||
+                                d.ServiceType == typeof(DbContextOptions<RiftboundDbContext>))
+                    .ToList();
+                foreach (var d in dbDescriptors) services.Remove(d);
+                services.AddDbContextFactory<RiftboundDbContext>(o =>
+                    o.UseInMemoryDatabase("integration-test-" + Guid.NewGuid()));
+            });
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
@@ -143,5 +175,23 @@ public class EventPipelineIntegrationTests
             signal.TrySetResult();
             return Task.FromResult(events);
         }
+    }
+
+    private sealed class NoOpEventNotifier : IEventNotifier
+    {
+        public Task NotifyNewEventsAsync(IReadOnlyList<RiftboundEvent> events, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+        public Task NotifyStatusChangedAsync(IReadOnlyList<StatusChange> changes, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+    }
+
+    private sealed class InMemoryNotificationStateRepository : INotificationStateRepository
+    {
+        public Task<IReadOnlyDictionary<string, RegistrationStatus>> LoadAsync(CancellationToken ct) =>
+            Task.FromResult<IReadOnlyDictionary<string, RegistrationStatus>>(
+                new Dictionary<string, RegistrationStatus>());
+
+        public Task SaveAsync(IReadOnlyDictionary<string, RegistrationStatus> states, CancellationToken ct) =>
+            Task.CompletedTask;
     }
 }
