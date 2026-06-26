@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.StaticFiles;
 using RiftboundCalendar.Core.Interfaces;
 using RiftboundCalendar.Infrastructure.BackgroundServices;
 using RiftboundCalendar.Infrastructure.Caching;
-using RiftboundCalendar.Infrastructure.Notifications;
 using RiftboundCalendar.Infrastructure.Configuration;
 using RiftboundCalendar.Infrastructure.Fetching;
 using RiftboundCalendar.Infrastructure.Notifications;
@@ -13,7 +12,7 @@ builder.Services.Configure<RiftboundOptions>(
     builder.Configuration.GetSection(RiftboundOptions.SectionName));
 builder.Services.Configure<DiscordOptions>(
     builder.Configuration.GetSection(DiscordOptions.SectionName));
-builder.Services.AddSingleton<DiscordNotifier>();
+builder.Services.AddSingleton<IEventNotifier, DiscordNotifier>();
 
 var allowedOrigins = builder.Configuration
     .GetSection("AllowedOrigins").Get<string[]>() ?? [];
@@ -51,7 +50,7 @@ if (app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
     app.MapPost("/api/debug/notify-discord", async (
         IEventRepository repo,
-        DiscordNotifier notifier,
+        IEventNotifier notifier,
         CancellationToken ct) =>
     {
         var events = await repo.GetEventsAsync(ct);

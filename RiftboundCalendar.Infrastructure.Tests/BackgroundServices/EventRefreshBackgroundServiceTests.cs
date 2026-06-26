@@ -5,21 +5,19 @@ using Microsoft.Extensions.Options;
 using Moq;
 using RiftboundCalendar.Core.Entities;
 using RiftboundCalendar.Core.Interfaces;
-using Microsoft.Extensions.Http;
 using RiftboundCalendar.Infrastructure.BackgroundServices;
 using RiftboundCalendar.Infrastructure.Caching;
 using RiftboundCalendar.Infrastructure.Configuration;
-using RiftboundCalendar.Infrastructure.Notifications;
 
 namespace RiftboundCalendar.Infrastructure.Tests.BackgroundServices;
 
 public class EventRefreshBackgroundServiceTests : IDisposable
 {
     private readonly Mock<IEventFetcher> _mockFetcher = new();
+    private readonly Mock<IEventNotifier> _mockNotifier = new();
     private readonly IMemoryCache _memoryCache = new MemoryCache(Options.Create(new MemoryCacheOptions()));
     private readonly EventCacheRepository _cacheRepo;
 
-    // Long delay so service only runs once before the test cancels it
     private readonly IOptions<RiftboundOptions> _options = Options.Create(new RiftboundOptions
     {
         RefreshIntervalMinutes = 60,
@@ -69,7 +67,7 @@ public class EventRefreshBackgroundServiceTests : IDisposable
 
         await sut.StartAsync(cts.Token);
         await fetched.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await Task.Delay(50); // allow UpdateCache to complete
+        await Task.Delay(50);
         await cts.CancelAsync();
         await sut.StopAsync(CancellationToken.None);
 
@@ -91,59 +89,122 @@ public class EventRefreshBackgroundServiceTests : IDisposable
 
         await sut.StartAsync(cts.Token);
         await fetched.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await Task.Delay(50); // allow exception handler to run
+        await Task.Delay(50);
         await cts.CancelAsync();
 
         Func<Task> stop = () => sut.StopAsync(CancellationToken.None);
         await stop.Should().NotThrowAsync();
     }
 
+    [Fact]
+    public async Task ExecuteAsync_WhenStatusChangesToOpen_NotifiesStatusChange()
+    {
+        var (sut, secondCycleTcs) = CreateTwoCycleSut(
+            firstStatus: "REGISTRATION_CLOSED",
+            secondStatus: "REGISTRATION_OPEN");
+
+        using var cts = new CancellationTokenSource();
+        await sut.StartAsync(cts.Token);
+        await secondCycleTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(100);
+        await cts.CancelAsync();
+        await sut.StopAsync(CancellationToken.None);
+
+        _mockNotifier.Verify(n => n.NotifyStatusChangedAsync(
+            It.Is<IReadOnlyList<StatusChange>>(c => c.Count > 0),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenStatusUnchanged_DoesNotNotifyStatusChange()
+    {
+        var (sut, secondCycleTcs) = CreateTwoCycleSut(
+            firstStatus: "REGISTRATION_OPEN",
+            secondStatus: "REGISTRATION_OPEN",
+            capacity: 32, registeredCount: 10);
+
+        using var cts = new CancellationTokenSource();
+        await sut.StartAsync(cts.Token);
+        await secondCycleTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(100);
+        await cts.CancelAsync();
+        await sut.StopAsync(CancellationToken.None);
+
+        _mockNotifier.Verify(n => n.NotifyStatusChangedAsync(
+            It.IsAny<IReadOnlyList<StatusChange>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenStatusChangesToFull_DoesNotNotifyStatusChange()
+    {
+        var nearBudapest = new EventLocation("Test", 47.4600, 18.9283);
+        var openEvent = MakeEvent("evt1", nearBudapest,
+            new EventStats { LifecycleStatus = "REGISTRATION_OPEN", Capacity = 32, RegisteredCount = 10 });
+        var fullEvent = MakeEvent("evt1", nearBudapest,
+            new EventStats { LifecycleStatus = "REGISTRATION_OPEN", Capacity = 32, RegisteredCount = 32 });
+
+        var (sut, secondCycleTcs) = CreateTwoCycleSutFromEvents(openEvent, fullEvent);
+
+        using var cts = new CancellationTokenSource();
+        await sut.StartAsync(cts.Token);
+        await secondCycleTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(100);
+        await cts.CancelAsync();
+        await sut.StopAsync(CancellationToken.None);
+
+        _mockNotifier.Verify(n => n.NotifyStatusChangedAsync(
+            It.IsAny<IReadOnlyList<StatusChange>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenStatusChangesToClosed_DoesNotNotifyStatusChange()
+    {
+        var (sut, secondCycleTcs) = CreateTwoCycleSut(
+            firstStatus: "REGISTRATION_OPEN",
+            secondStatus: "REGISTRATION_CLOSED");
+
+        using var cts = new CancellationTokenSource();
+        await sut.StartAsync(cts.Token);
+        await secondCycleTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(100);
+        await cts.CancelAsync();
+        await sut.StopAsync(CancellationToken.None);
+
+        _mockNotifier.Verify(n => n.NotifyStatusChangedAsync(
+            It.IsAny<IReadOnlyList<StatusChange>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     private EventRefreshBackgroundService CreateSut() =>
-        new(_mockFetcher.Object, _cacheRepo, CreateNullObservers(), _options,
-            NullLogger<EventRefreshBackgroundService>.Instance);
+        new(_mockFetcher.Object, _cacheRepo,
+            new EventRefreshObservers(new StartupReadiness(), _mockNotifier.Object),
+            _options, NullLogger<EventRefreshBackgroundService>.Instance);
 
-    private static EventRefreshObservers CreateNullObservers()
+    private (EventRefreshBackgroundService sut, TaskCompletionSource secondCycleTcs) CreateTwoCycleSut(
+        string firstStatus, string secondStatus,
+        int? capacity = null, int? registeredCount = null)
     {
-        var factory = new Mock<IHttpClientFactory>();
-        factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(new HttpClient());
-        var notifier = new DiscordNotifier(
-            factory.Object,
-            Options.Create(new DiscordOptions()),
-            NullLogger<DiscordNotifier>.Instance);
-        return new EventRefreshObservers(new StartupReadiness(), notifier);
+        var nearBudapest = new EventLocation("Test", 47.4600, 18.9283);
+        var first  = MakeEvent("evt1", nearBudapest, new EventStats { LifecycleStatus = firstStatus,  Capacity = capacity, RegisteredCount = registeredCount });
+        var second = MakeEvent("evt1", nearBudapest, new EventStats { LifecycleStatus = secondStatus, Capacity = capacity, RegisteredCount = registeredCount });
+        return CreateTwoCycleSutFromEvents(first, second);
     }
 
-    [Fact]
-    public async Task ExecuteAsync_WhenStatusChanges_NotifiesDiscord()
+    private (EventRefreshBackgroundService sut, TaskCompletionSource secondCycleTcs) CreateTwoCycleSutFromEvents(
+        RiftboundEvent first, RiftboundEvent second)
     {
-        var requestCount = 0;
-        var handler = new CapturingHandler(() => requestCount++);
-        var httpClient = new HttpClient(handler);
-        var factory = new Mock<IHttpClientFactory>();
-        factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(httpClient);
-        var notifier = new DiscordNotifier(
-            factory.Object,
-            Options.Create(new DiscordOptions { WebhookUrl = "https://discord.com/api/webhooks/test" }),
-            NullLogger<DiscordNotifier>.Instance);
-        var observers = new EventRefreshObservers(new StartupReadiness(), notifier);
-
-        var nearBudapest = new EventLocation("Test", 47.4600, 18.9283);
-        var closedEvent = new RiftboundEvent("evt1", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(4),
-            nearBudapest, new EventInfo("Test", "Constructed", new Uri("https://example.com")))
-            { Stats = new EventStats { LifecycleStatus = "REGISTRATION_CLOSED" } };
-        var openEvent = new RiftboundEvent("evt1", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(4),
-            nearBudapest, new EventInfo("Test", "Constructed", new Uri("https://example.com")))
-            { Stats = new EventStats { LifecycleStatus = "REGISTRATION_OPEN" } };
-
         var callCount = 0;
-        var secondCycleTcs = new TaskCompletionSource();
+        var tcs = new TaskCompletionSource();
         _mockFetcher
             .Setup(f => f.FetchAllEventsAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => { callCount++; return callCount == 1 ? [closedEvent] : [openEvent]; })
-            .Callback(() => { if (callCount >= 2) secondCycleTcs.TrySetResult(); });
+            .ReturnsAsync(() => { callCount++; return callCount == 1 ? [first] : [second]; })
+            .Callback(() => { if (callCount >= 2) tcs.TrySetResult(); });
 
         var sut = new EventRefreshBackgroundService(
-            _mockFetcher.Object, _cacheRepo, observers,
+            _mockFetcher.Object, _cacheRepo,
+            new EventRefreshObservers(new StartupReadiness(), _mockNotifier.Object),
             Options.Create(new RiftboundOptions
             {
                 RefreshIntervalMinutes = 0,
@@ -151,161 +212,18 @@ public class EventRefreshBackgroundServiceTests : IDisposable
             }),
             NullLogger<EventRefreshBackgroundService>.Instance);
 
-        using var cts = new CancellationTokenSource();
-        await sut.StartAsync(cts.Token);
-        await secondCycleTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await Task.Delay(100);
-        await cts.CancelAsync();
-        await sut.StopAsync(CancellationToken.None);
-
-        requestCount.Should().BeGreaterThan(0);
+        return (sut, tcs);
     }
 
-    [Fact]
-    public async Task ExecuteAsync_WhenStatusUnchanged_DoesNotNotify()
-    {
-        var requestCount = 0;
-        var handler = new CapturingHandler(() => requestCount++);
-        var httpClient = new HttpClient(handler);
-        var factory = new Mock<IHttpClientFactory>();
-        factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(httpClient);
-        var notifier = new DiscordNotifier(
-            factory.Object,
-            Options.Create(new DiscordOptions { WebhookUrl = "https://discord.com/api/webhooks/test" }),
-            NullLogger<DiscordNotifier>.Instance);
-        var observers = new EventRefreshObservers(new StartupReadiness(), notifier);
-
-        var nearBudapest = new EventLocation("Test", 47.4600, 18.9283);
-        var evt = new RiftboundEvent("evt1", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(4),
-            nearBudapest, new EventInfo("Test", "Constructed", new Uri("https://example.com")))
-            { Stats = new EventStats { LifecycleStatus = "REGISTRATION_OPEN", Capacity = 32, RegisteredCount = 10 } };
-
-        var secondCycleTcs = new TaskCompletionSource();
-        var callCount = 0;
-        _mockFetcher
-            .Setup(f => f.FetchAllEventsAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([evt])
-            .Callback(() => { if (++callCount == 2) secondCycleTcs.SetResult(); });
-
-        var sut = new EventRefreshBackgroundService(
-            _mockFetcher.Object, _cacheRepo, observers,
-            Options.Create(new RiftboundOptions
-            {
-                RefreshIntervalMinutes = 0,
-                BudapestLatitude = 47.4979, BudapestLongitude = 19.0402, RadiusKm = 50.0
-            }),
-            NullLogger<EventRefreshBackgroundService>.Instance);
-
-        using var cts = new CancellationTokenSource();
-        await sut.StartAsync(cts.Token);
-        await secondCycleTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await Task.Delay(100);
-        await cts.CancelAsync();
-        await sut.StopAsync(CancellationToken.None);
-
-        requestCount.Should().Be(0);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WhenStatusChangesToFull_DoesNotNotify()
-    {
-        var requestCount = 0;
-        var observers = CreateCapturingObservers(() => requestCount++);
-
-        var nearBudapest = new EventLocation("Test", 47.4600, 18.9283);
-        var openEvent = new RiftboundEvent("evt1", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(4),
-            nearBudapest, new EventInfo("Test", "Constructed", new Uri("https://example.com")))
-            { Stats = new EventStats { LifecycleStatus = "REGISTRATION_OPEN", Capacity = 32, RegisteredCount = 10 } };
-        var fullEvent = new RiftboundEvent("evt1", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(4),
-            nearBudapest, new EventInfo("Test", "Constructed", new Uri("https://example.com")))
-            { Stats = new EventStats { LifecycleStatus = "REGISTRATION_OPEN", Capacity = 32, RegisteredCount = 32 } };
-
-        var callCount = 0;
-        var secondCycleTcs = new TaskCompletionSource();
-        _mockFetcher
-            .Setup(f => f.FetchAllEventsAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => { callCount++; return callCount == 1 ? [openEvent] : [fullEvent]; })
-            .Callback(() => { if (callCount >= 2) secondCycleTcs.TrySetResult(); });
-
-        using var sut = CreateSutWithObservers(observers, refreshIntervalMinutes: 0);
-        using var cts = new CancellationTokenSource();
-        await sut.StartAsync(cts.Token);
-        await secondCycleTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await Task.Delay(100);
-        await cts.CancelAsync();
-        await sut.StopAsync(CancellationToken.None);
-
-        requestCount.Should().Be(0);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WhenStatusChangesToClosed_DoesNotNotify()
-    {
-        var requestCount = 0;
-        var observers = CreateCapturingObservers(() => requestCount++);
-
-        var nearBudapest = new EventLocation("Test", 47.4600, 18.9283);
-        var openEvent = new RiftboundEvent("evt1", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(4),
-            nearBudapest, new EventInfo("Test", "Constructed", new Uri("https://example.com")))
-            { Stats = new EventStats { LifecycleStatus = "REGISTRATION_OPEN" } };
-        var closedEvent = new RiftboundEvent("evt1", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(4),
-            nearBudapest, new EventInfo("Test", "Constructed", new Uri("https://example.com")))
-            { Stats = new EventStats { LifecycleStatus = "REGISTRATION_CLOSED" } };
-
-        var callCount = 0;
-        var secondCycleTcs = new TaskCompletionSource();
-        _mockFetcher
-            .Setup(f => f.FetchAllEventsAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => { callCount++; return callCount == 1 ? [openEvent] : [closedEvent]; })
-            .Callback(() => { if (callCount >= 2) secondCycleTcs.TrySetResult(); });
-
-        using var sut = CreateSutWithObservers(observers, refreshIntervalMinutes: 0);
-        using var cts = new CancellationTokenSource();
-        await sut.StartAsync(cts.Token);
-        await secondCycleTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await Task.Delay(100);
-        await cts.CancelAsync();
-        await sut.StopAsync(CancellationToken.None);
-
-        requestCount.Should().Be(0);
-    }
-
-    private static EventRefreshObservers CreateCapturingObservers(Action onRequest)
-    {
-        var handler = new CapturingHandler(onRequest);
-        var factory = new Mock<IHttpClientFactory>();
-        factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(() => new HttpClient(handler));
-        var notifier = new DiscordNotifier(
-            factory.Object,
-            Options.Create(new DiscordOptions { WebhookUrl = "https://discord.com/api/webhooks/test" }),
-            NullLogger<DiscordNotifier>.Instance);
-        return new EventRefreshObservers(new StartupReadiness(), notifier);
-    }
-
-    private EventRefreshBackgroundService CreateSutWithObservers(
-        EventRefreshObservers observers, int refreshIntervalMinutes = 60) =>
-        new(_mockFetcher.Object, _cacheRepo, observers,
-            Options.Create(new RiftboundOptions
-            {
-                RefreshIntervalMinutes = refreshIntervalMinutes,
-                BudapestLatitude = 47.4979, BudapestLongitude = 19.0402, RadiusKm = 50.0
-            }),
-            NullLogger<EventRefreshBackgroundService>.Instance);
+    private static RiftboundEvent MakeEvent(string id, EventLocation location, EventStats stats) =>
+        new RiftboundEvent(id, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(4),
+            location, new EventInfo("Test", "Constructed", new Uri("https://example.com")))
+            { Stats = stats };
 
     private static RiftboundEvent CreateEvent(string id, double lat, double lng) =>
         new(id, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2),
             new EventLocation("Test", lat, lng),
             new EventInfo("Test Event", "Constructed", new Uri("https://example.com")));
-
-    private sealed class CapturingHandler(Action onRequest) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            onRequest();
-            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NoContent));
-        }
-    }
 
     public void Dispose() => _memoryCache.Dispose();
 }

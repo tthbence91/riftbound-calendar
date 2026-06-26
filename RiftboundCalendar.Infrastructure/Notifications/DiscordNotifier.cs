@@ -4,10 +4,11 @@ using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RiftboundCalendar.Core.Entities;
+using RiftboundCalendar.Core.Interfaces;
 
 namespace RiftboundCalendar.Infrastructure.Notifications;
 
-public sealed class DiscordNotifier
+public sealed class DiscordNotifier : IEventNotifier
 {
     private const int MaxEmbedsPerMessage = 10;
     private const int EmbedColor = 0x3498DB;
