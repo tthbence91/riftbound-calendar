@@ -38,12 +38,22 @@ public sealed class DiscordNotifier
         if (string.IsNullOrEmpty(_options.WebhookUrl)) return;
 
         foreach (var batch in events.Chunk(MaxEmbedsPerMessage))
-            await SendBatchAsync(batch, cancellationToken);
+            await SendAsync(new { embeds = batch.Select(BuildNewEventEmbed).ToArray() }, cancellationToken);
     }
 
-    private async Task SendBatchAsync(RiftboundEvent[] events, CancellationToken cancellationToken)
+    public async Task NotifyStatusChangedAsync(
+        IReadOnlyList<StatusChange> changes,
+        CancellationToken cancellationToken)
     {
-        var payload = new { embeds = events.Select(BuildEmbed).ToArray() };
+        if (string.IsNullOrEmpty(_options.WebhookUrl)) return;
+        if (changes.Count == 0) return;
+
+        foreach (var batch in changes.Chunk(MaxEmbedsPerMessage))
+            await SendAsync(new { embeds = batch.Select(BuildStatusEmbed).ToArray() }, cancellationToken);
+    }
+
+    private async Task SendAsync(object payload, CancellationToken cancellationToken)
+    {
         try
         {
             using var http = _httpFactory.CreateClient();
@@ -58,12 +68,9 @@ public sealed class DiscordNotifier
         }
     }
 
-    private static object BuildEmbed(RiftboundEvent e)
+    private static object BuildNewEventEmbed(RiftboundEvent e)
     {
-        var start = e.StartDate.ToLocalTime();
-        var end = e.EndDate.ToLocalTime();
-        var date = $"{start:yyyy. MM. dd.} {start:HH:mm}–{end:HH:mm}";
-
+        var (start, end, date) = FormatDate(e);
         return new
         {
             title = e.Info.Title,
@@ -78,4 +85,47 @@ public sealed class DiscordNotifier
             footer = new { text = "Riftbound Eseménynaptár" }
         };
     }
+
+    private static object BuildStatusEmbed(StatusChange change)
+    {
+        var (headline, color) = change.NewStatus switch
+        {
+            RegistrationStatus.Open when change.OldStatus == RegistrationStatus.Full
+                => ("🔓 Ismét van szabad hely!", 0x2ECC71),
+            RegistrationStatus.Open  => ("🟢 Megnyílt a jelentkezés!", 0x2ECC71),
+            RegistrationStatus.Full  => ("🔴 Betelt az esemény", 0xE74C3C),
+            RegistrationStatus.Closed => ("🔒 Lezárult a jelentkezés", 0x95A5A6),
+            _ => ("🔄 Státusz változás", EmbedColor)
+        };
+
+        var (_, _, date) = FormatDate(change.Event);
+        var e = change.Event;
+        return new
+        {
+            title = $"{headline} — {e.Info.Title}",
+            url = e.Info.Url.ToString(),
+            color,
+            fields = new[]
+            {
+                new { name = "📍 Helyszín", value = e.Location.Name, inline = true },
+                new { name = "📅 Időpont", value = date, inline = true }
+            },
+            footer = new { text = $"Riftbound Eseménynaptár  ·  {StatusLabel(change.OldStatus)} → {StatusLabel(change.NewStatus)}" }
+        };
+    }
+
+    private static (DateTime start, DateTime end, string formatted) FormatDate(RiftboundEvent e)
+    {
+        var start = e.StartDate.ToLocalTime().DateTime;
+        var end = e.EndDate.ToLocalTime().DateTime;
+        return (start, end, $"{start:yyyy. MM. dd.} {start:HH:mm}–{end:HH:mm}");
+    }
+
+    private static string StatusLabel(RegistrationStatus status) => status switch
+    {
+        RegistrationStatus.Open   => "Nyitott",
+        RegistrationStatus.Full   => "Betelt",
+        RegistrationStatus.Closed => "Lezárt",
+        _                         => status.ToString()
+    };
 }

@@ -2,6 +2,7 @@
 @inject EventApiClient ApiClient
 @inject IDialogService DialogService
 @inject LocationPreferenceService LocationPrefs
+@inject IBrowserViewportService BrowserViewport
 
 <PageTitle>Riftbound Eseménynaptár</PageTitle>
 
@@ -116,6 +117,7 @@ else
 
     private async Task OpenLocationPicker()
     {
+        var isMobile = await IsMobileAsync();
         var parameters = new DialogParameters<LocationPickerDialog>
         {
             { x => x.InitialLat, _location.Lat },
@@ -126,7 +128,8 @@ else
         {
             MaxWidth = MaxWidth.Medium,
             FullWidth = true,
-            CloseOnEscapeKey = true
+            CloseOnEscapeKey = true,
+            FullScreen = isMobile
         };
         var dialog = await DialogService.ShowAsync<LocationPickerDialog>(
             string.Empty, parameters, options);
@@ -161,6 +164,7 @@ else
 
     private async Task OnMoreClicked(DateTime date)
     {
+        var isMobile = await IsMobileAsync();
         var dayItems = _items
             .Where(i => i.Start.Date == date.Date)
             .OrderBy(i => i.Start)
@@ -171,7 +175,7 @@ else
             { x => x.Date, date },
             { x => x.Items, dayItems }
         };
-        var options = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseOnEscapeKey = true };
+        var options = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseOnEscapeKey = true, FullScreen = isMobile };
         await DialogService.ShowAsync<DayEventsDialog>(string.Empty, parameters, options);
     }
 
@@ -188,11 +192,18 @@ else
 
     private async Task OnItemClicked(RiftboundCalendarItem item)
     {
+        var isMobile = await IsMobileAsync();
         var parameters = new DialogParameters<EventDetailDialog>
         {
             { x => x.Event, item.Event }
         };
-        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true, FullScreen = isMobile };
         await DialogService.ShowAsync<EventDetailDialog>(string.Empty, parameters, options);
+    }
+
+    private async Task<bool> IsMobileAsync()
+    {
+        var bp = await BrowserViewport.GetCurrentBreakpointAsync();
+        return bp is Breakpoint.Xs or Breakpoint.Sm;
     }
 }

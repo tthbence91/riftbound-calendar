@@ -6,6 +6,7 @@ using RiftboundCalendar.Core.Interfaces;
 using RiftboundCalendar.Infrastructure.Caching;
 using RiftboundCalendar.Infrastructure.Configuration;
 using RiftboundCalendar.Infrastructure.Filtering;
+using RiftboundCalendar.Infrastructure.Notifications;
 
 namespace RiftboundCalendar.Infrastructure.BackgroundServices;
 
@@ -23,6 +24,7 @@ public sealed class EventRefreshBackgroundService : BackgroundService
     private bool _isFirstAttempt = true;
     private int _startupRetries;
     private HashSet<string>? _seenEventIds;
+    private Dictionary<string, RegistrationStatus>? _seenStatuses;
 
     public EventRefreshBackgroundService(
         IEventFetcher fetcher,
@@ -65,9 +67,13 @@ public sealed class EventRefreshBackgroundService : BackgroundService
             if (filtered.Count > 0)
             {
                 if (_seenEventIds is not null)
+                {
                     await NotifyNewEventsAsync(filtered, _seenEventIds, stoppingToken);
+                    await NotifyStatusChangesAsync(filtered, _seenStatuses!, stoppingToken);
+                }
 
                 _seenEventIds = filtered.Select(e => e.Id).ToHashSet();
+                _seenStatuses = filtered.ToDictionary(e => e.Id, e => e.Stats.GetRegistrationStatus());
                 _cache.UpdateCache(filtered);
                 _startupRetries = 0;
                 return false;
@@ -116,5 +122,22 @@ public sealed class EventRefreshBackgroundService : BackgroundService
 
         _logger.LogInformation("Notifying {Count} new event(s) via Discord", newEvents.Count);
         await _observers.Notifier.NotifyNewEventsAsync(newEvents, ct);
+    }
+
+    private async Task NotifyStatusChangesAsync(
+        IReadOnlyList<RiftboundEvent> current,
+        Dictionary<string, RegistrationStatus> previousStatuses,
+        CancellationToken ct)
+    {
+        var changes = current
+            .Where(e => previousStatuses.TryGetValue(e.Id, out var prev)
+                        && prev != e.Stats.GetRegistrationStatus())
+            .Select(e => new StatusChange(e, previousStatuses[e.Id], e.Stats.GetRegistrationStatus()))
+            .ToList();
+
+        if (changes.Count == 0) return;
+
+        _logger.LogInformation("Notifying {Count} status change(s) via Discord", changes.Count);
+        await _observers.Notifier.NotifyStatusChangedAsync(changes, ct);
     }
 }
