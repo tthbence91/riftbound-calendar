@@ -14,9 +14,10 @@ builder.Services.Configure<RiftboundOptions>(
     builder.Configuration.GetSection(RiftboundOptions.SectionName));
 builder.Services.Configure<DiscordOptions>(
     builder.Configuration.GetSection(DiscordOptions.SectionName));
+builder.Services.AddSingleton<IRetryPolicy, DiscordRetryPolicy>();
 builder.Services.AddSingleton<IEventNotifier, DiscordNotifier>();
-builder.Services.AddDbContextFactory<RiftboundDbContext>(o =>
-    o.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContextFactory<RiftboundDbContext>(o => o.UseNpgsql(connectionString));
 builder.Services.AddSingleton<INotificationStateRepository, NotificationStateRepository>();
 
 var allowedOrigins = builder.Configuration
@@ -49,13 +50,11 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-await using (var scope = app.Services.CreateAsyncScope())
+if (!string.IsNullOrEmpty(connectionString))
 {
+    await using var scope = app.Services.CreateAsyncScope();
     var db = scope.ServiceProvider.GetRequiredService<RiftboundDbContext>();
-    if (db.Database.IsRelational())
-        await db.Database.MigrateAsync();
-    else
-        await db.Database.EnsureCreatedAsync();
+    await db.Database.MigrateAsync();
 }
 
 if (app.Environment.IsDevelopment())

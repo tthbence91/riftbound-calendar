@@ -19,15 +19,18 @@ public sealed class DiscordNotifier : IEventNotifier
     };
 
     private readonly IHttpClientFactory _httpFactory;
+    private readonly IRetryPolicy _retryPolicy;
     private readonly DiscordOptions _options;
     private readonly ILogger<DiscordNotifier> _logger;
 
     public DiscordNotifier(
         IHttpClientFactory httpFactory,
+        IRetryPolicy retryPolicy,
         IOptions<DiscordOptions> options,
         ILogger<DiscordNotifier> logger)
     {
         _httpFactory = httpFactory;
+        _retryPolicy = retryPolicy;
         _options = options.Value;
         _logger = logger;
     }
@@ -58,14 +61,15 @@ public sealed class DiscordNotifier : IEventNotifier
         try
         {
             using var http = _httpFactory.CreateClient();
-            var response = await http.PostAsJsonAsync(
-                _options.WebhookUrl, payload, JsonOptions, cancellationToken);
+            var response = await _retryPolicy.ExecuteAsync(
+                ct => http.PostAsJsonAsync(_options.WebhookUrl, payload, JsonOptions, ct),
+                cancellationToken);
             if (!response.IsSuccessStatusCode)
-                _logger.LogWarning("Discord webhook returned {Status}", response.StatusCode);
+                _logger.LogWarning("Discord webhook returned {Status} after retries", response.StatusCode);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError(ex, "Failed to send Discord notification");
+            _logger.LogError(ex, "Failed to send Discord notification after retries");
         }
     }
 

@@ -15,7 +15,7 @@ public class DiscordNotifierStatusTests
     {
         var handler = new CapturingHttpMessageHandler();
         var factory = CreateFactory(handler);
-        var sut = new DiscordNotifier(factory, Options.Create(new DiscordOptions()), NullLogger<DiscordNotifier>.Instance);
+        var sut = new DiscordNotifier(factory, new NoRetryPolicy(), Options.Create(new DiscordOptions()), NullLogger<DiscordNotifier>.Instance);
 
         await sut.NotifyStatusChangedAsync([CreateChange(RegistrationStatus.Closed, RegistrationStatus.Open)], CancellationToken.None);
 
@@ -29,6 +29,7 @@ public class DiscordNotifierStatusTests
         var factory = CreateFactory(handler);
         var sut = new DiscordNotifier(
             factory,
+            new NoRetryPolicy(),
             Options.Create(new DiscordOptions { WebhookUrl = "https://discord.com/api/webhooks/test" }),
             NullLogger<DiscordNotifier>.Instance);
 
@@ -44,6 +45,7 @@ public class DiscordNotifierStatusTests
         var factory = CreateFactory(handler);
         var sut = new DiscordNotifier(
             factory,
+            new NoRetryPolicy(),
             Options.Create(new DiscordOptions { WebhookUrl = "https://discord.com/api/webhooks/test" }),
             NullLogger<DiscordNotifier>.Instance);
 
@@ -63,6 +65,7 @@ public class DiscordNotifierStatusTests
         var factory = CreateFactory(handler);
         var sut = new DiscordNotifier(
             factory,
+            new NoRetryPolicy(),
             Options.Create(new DiscordOptions { WebhookUrl = "https://discord.com/api/webhooks/test" }),
             NullLogger<DiscordNotifier>.Instance);
 
@@ -103,5 +106,12 @@ public class DiscordNotifierStatusTests
             Requests.Add(request);
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent));
         }
+    }
+
+    private sealed class NoRetryPolicy : IRetryPolicy
+    {
+        public Task<HttpResponseMessage> ExecuteAsync(
+            Func<CancellationToken, Task<HttpResponseMessage>> operation,
+            CancellationToken ct) => operation(ct);
     }
 }

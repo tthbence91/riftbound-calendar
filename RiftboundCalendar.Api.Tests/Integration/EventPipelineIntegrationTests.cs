@@ -3,13 +3,11 @@ using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using RiftboundCalendar.Api.Dtos;
 using RiftboundCalendar.Core.Entities;
 using RiftboundCalendar.Core.Interfaces;
-using RiftboundCalendar.Infrastructure.Persistence;
 
 namespace RiftboundCalendar.Api.Tests.Integration;
 
@@ -21,11 +19,11 @@ namespace RiftboundCalendar.Api.Tests.Integration;
 /// IMPORTANT — test isolation: WebApplicationFactory starts the full application including
 /// all hosted services. Every external infrastructure service MUST be overridden in
 /// CreateFactory to prevent side effects:
-///   • IEventFetcher       → SignalingStubFetcher  (controlled test data, no real HTTP)
-///   • IEventNotifier      → NoOpEventNotifier     (no real Discord webhook calls)
-///   • INotificationStateRepository → InMemoryNotificationStateRepository (no real DB)
-///   • IDbContextFactory   → InMemory EF provider  (no real DB connection on startup migration)
-/// Failing to override any of these will cause real side effects during test runs.
+///   • IEventFetcher                → SignalingStubFetcher             (controlled test data, no real HTTP)
+///   • IEventNotifier               → NoOpEventNotifier                (no real Discord webhook calls)
+///   • INotificationStateRepository → InMemoryNotificationStateRepository (no real DB reads/writes)
+/// DB migration is skipped automatically when no ConnectionStrings:DefaultConnection is configured.
+/// Failing to override the above services will cause real side effects during test runs.
 /// </summary>
 public class EventPipelineIntegrationTests
 {
@@ -148,15 +146,6 @@ public class EventPipelineIntegrationTests
                     d => d.ServiceType == typeof(INotificationStateRepository));
                 if (stateRepoDescriptor != null) services.Remove(stateRepoDescriptor);
                 services.AddSingleton<INotificationStateRepository, InMemoryNotificationStateRepository>();
-
-                var dbDescriptors = services
-                    .Where(d => d.ServiceType == typeof(IDbContextFactory<RiftboundDbContext>) ||
-                                d.ServiceType == typeof(RiftboundDbContext) ||
-                                d.ServiceType == typeof(DbContextOptions<RiftboundDbContext>))
-                    .ToList();
-                foreach (var d in dbDescriptors) services.Remove(d);
-                services.AddDbContextFactory<RiftboundDbContext>(o =>
-                    o.UseInMemoryDatabase("integration-test-" + Guid.NewGuid()));
             });
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
