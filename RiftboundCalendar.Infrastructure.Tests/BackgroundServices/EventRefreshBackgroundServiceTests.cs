@@ -17,6 +17,7 @@ public class EventRefreshBackgroundServiceTests : IDisposable
     private readonly Mock<IEventFetcher> _mockFetcher = new();
     private readonly Mock<IEventNotifier> _mockNotifier = new();
     private readonly Mock<INotificationStateRepository> _mockStateRepo = new();
+    private readonly Mock<IStatusHistoryRepository> _mockHistoryRepo = new();
     private readonly IMemoryCache _memoryCache = new MemoryCache(Options.Create(new MemoryCacheOptions()));
     private readonly EventCacheRepository _cacheRepo;
 
@@ -36,6 +37,12 @@ public class EventRefreshBackgroundServiceTests : IDisposable
             .ReturnsAsync(new Dictionary<string, RegistrationStatus>());
         _mockStateRepo
             .Setup(r => r.SaveAsync(It.IsAny<IReadOnlyDict>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        _mockHistoryRepo
+            .Setup(r => r.AppendAsync(It.IsAny<IReadOnlyList<EventStatusHistoryEntry>>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        _mockHistoryRepo
+            .Setup(r => r.DeleteExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
     }
 
@@ -187,7 +194,7 @@ public class EventRefreshBackgroundServiceTests : IDisposable
 
     private EventRefreshBackgroundService CreateSut() =>
         new(_mockFetcher.Object, _cacheRepo,
-            new EventRefreshObservers(new StartupReadiness(), _mockNotifier.Object, _mockStateRepo.Object),
+            new EventRefreshObservers(new StartupReadiness(), _mockNotifier.Object, _mockStateRepo.Object, _mockHistoryRepo.Object),
             _options, NullLogger<EventRefreshBackgroundService>.Instance);
 
     private (EventRefreshBackgroundService sut, TaskCompletionSource secondCycleTcs) CreateTwoCycleSut(
@@ -212,7 +219,7 @@ public class EventRefreshBackgroundServiceTests : IDisposable
 
         var sut = new EventRefreshBackgroundService(
             _mockFetcher.Object, _cacheRepo,
-            new EventRefreshObservers(new StartupReadiness(), _mockNotifier.Object, _mockStateRepo.Object),
+            new EventRefreshObservers(new StartupReadiness(), _mockNotifier.Object, _mockStateRepo.Object, _mockHistoryRepo.Object),
             Options.Create(new RiftboundOptions
             {
                 RefreshIntervalMinutes = 0,
@@ -221,6 +228,71 @@ public class EventRefreshBackgroundServiceTests : IDisposable
             NullLogger<EventRefreshBackgroundService>.Instance);
 
         return (sut, tcs);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenStatusChanges_WritesHistoryEntry()
+    {
+        var (sut, secondCycleTcs) = CreateTwoCycleSut(
+            firstStatus: "REGISTRATION_CLOSED",
+            secondStatus: "REGISTRATION_OPEN");
+
+        using var cts = new CancellationTokenSource();
+        await sut.StartAsync(cts.Token);
+        await secondCycleTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(100);
+        await cts.CancelAsync();
+        await sut.StopAsync(CancellationToken.None);
+
+        _mockHistoryRepo.Verify(r => r.AppendAsync(
+            It.Is<IReadOnlyList<EventStatusHistoryEntry>>(e => e.Count > 0),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenStatusChangesToFull_AlsoWritesHistoryEntry()
+    {
+        var nearBudapest = new EventLocation("Test", 47.4600, 18.9283);
+        var openEvent = MakeEvent("evt1", nearBudapest,
+            new EventStats { LifecycleStatus = "REGISTRATION_OPEN", Capacity = 32, RegisteredCount = 10 });
+        var fullEvent = MakeEvent("evt1", nearBudapest,
+            new EventStats { LifecycleStatus = "REGISTRATION_OPEN", Capacity = 32, RegisteredCount = 32 });
+
+        var (sut, secondCycleTcs) = CreateTwoCycleSutFromEvents(openEvent, fullEvent);
+
+        using var cts = new CancellationTokenSource();
+        await sut.StartAsync(cts.Token);
+        await secondCycleTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(100);
+        await cts.CancelAsync();
+        await sut.StopAsync(CancellationToken.None);
+
+        _mockHistoryRepo.Verify(r => r.AppendAsync(
+            It.Is<IReadOnlyList<EventStatusHistoryEntry>>(e => e.Count > 0),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_AfterCycle_DeletesExpiredHistory()
+    {
+        var fetched = new TaskCompletionSource();
+        _mockFetcher
+            .Setup(f => f.FetchAllEventsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([])
+            .Callback(fetched.SetResult);
+
+        using var cts = new CancellationTokenSource();
+        using var sut = CreateSut();
+
+        await sut.StartAsync(cts.Token);
+        await fetched.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(50);
+        await cts.CancelAsync();
+        await sut.StopAsync(CancellationToken.None);
+
+        _mockHistoryRepo.Verify(r => r.DeleteExpiredAsync(
+            It.IsAny<DateTimeOffset>(),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
     }
 
     private static RiftboundEvent MakeEvent(string id, EventLocation location, EventStats stats) =>

@@ -29,4 +29,21 @@ public sealed class EventApiClient
             return [];
         }
     }
+
+    public async Task<IReadOnlyList<StatusHistoryEntryDto>> GetEventHistoryAsync(
+        string eventId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var history = await _httpClient.GetFromJsonAsync<List<StatusHistoryEntryDto>>(
+                $"api/events/{eventId}/history", cancellationToken);
+            return history ?? [];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Failed to fetch event history for {EventId}", eventId);
+            return [];
+        }
+    }
 }

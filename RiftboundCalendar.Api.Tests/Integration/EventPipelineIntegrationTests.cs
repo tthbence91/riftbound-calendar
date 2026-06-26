@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using RiftboundCalendar.Api.Dtos;
 using RiftboundCalendar.Core.Entities;
+using RiftboundCalendar.Core.Entities;
 using RiftboundCalendar.Core.Interfaces;
 
 namespace RiftboundCalendar.Api.Tests.Integration;
@@ -146,6 +147,11 @@ public class EventPipelineIntegrationTests
                     d => d.ServiceType == typeof(INotificationStateRepository));
                 if (stateRepoDescriptor != null) services.Remove(stateRepoDescriptor);
                 services.AddSingleton<INotificationStateRepository, InMemoryNotificationStateRepository>();
+
+                var historyRepoDescriptor = services.SingleOrDefault(
+                    d => d.ServiceType == typeof(IStatusHistoryRepository));
+                if (historyRepoDescriptor != null) services.Remove(historyRepoDescriptor);
+                services.AddSingleton<IStatusHistoryRepository, InMemoryStatusHistoryRepository>();
             });
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
@@ -181,6 +187,18 @@ public class EventPipelineIntegrationTests
                 new Dictionary<string, RegistrationStatus>());
 
         public Task SaveAsync(IReadOnlyDictionary<string, RegistrationStatus> states, CancellationToken ct) =>
+            Task.CompletedTask;
+    }
+
+    private sealed class InMemoryStatusHistoryRepository : IStatusHistoryRepository
+    {
+        public Task AppendAsync(IReadOnlyList<EventStatusHistoryEntry> entries, CancellationToken ct) =>
+            Task.CompletedTask;
+
+        public Task<IReadOnlyList<EventStatusHistoryEntry>> GetByEventIdAsync(string eventId, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<EventStatusHistoryEntry>>([]);
+
+        public Task DeleteExpiredAsync(DateTimeOffset cutoff, CancellationToken ct) =>
             Task.CompletedTask;
     }
 }

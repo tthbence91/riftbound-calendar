@@ -6,7 +6,6 @@ using RiftboundCalendar.Core.Interfaces;
 using RiftboundCalendar.Infrastructure.Caching;
 using RiftboundCalendar.Infrastructure.Configuration;
 using RiftboundCalendar.Infrastructure.Filtering;
-using RiftboundCalendar.Infrastructure.Notifications;
 
 namespace RiftboundCalendar.Infrastructure.BackgroundServices;
 
@@ -83,7 +82,9 @@ public sealed class EventRefreshBackgroundService : BackgroundService
                 if (_previousStates!.Count > 0)
                 {
                     await NotifyNewEventsAsync(filtered, _previousStates, stoppingToken);
-                    await NotifyStatusChangesAsync(filtered, _previousStates, stoppingToken);
+                    var statusChanges = DetectStatusChanges(filtered, _previousStates);
+                    await WriteStatusHistoryAsync(statusChanges, stoppingToken);
+                    await NotifyStatusChangesAsync(statusChanges, stoppingToken);
                 }
 
                 var newStates = filtered.ToDictionary(e => e.Id, e => e.Stats.GetRegistrationStatus());
@@ -125,8 +126,18 @@ public sealed class EventRefreshBackgroundService : BackgroundService
                 _isFirstAttempt = false;
                 _observers.Readiness.Signal();
             }
+            await CleanupExpiredHistoryAsync(stoppingToken);
         }
     }
+
+    private static IReadOnlyList<StatusChange> DetectStatusChanges(
+        IReadOnlyList<RiftboundEvent> current,
+        IReadOnlyDictionary<string, RegistrationStatus> previousStates) =>
+        current
+            .Where(e => previousStates.TryGetValue(e.Id, out var prev)
+                        && prev != e.Stats.GetRegistrationStatus())
+            .Select(e => new StatusChange(e, previousStates[e.Id], e.Stats.GetRegistrationStatus()))
+            .ToList();
 
     private async Task SaveStateAsync(Dictionary<string, RegistrationStatus> states, CancellationToken ct)
     {
@@ -137,6 +148,41 @@ public sealed class EventRefreshBackgroundService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to save notification state to DB");
+        }
+    }
+
+    private async Task WriteStatusHistoryAsync(IReadOnlyList<StatusChange> changes, CancellationToken ct)
+    {
+        if (changes.Count == 0) return;
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var entries = changes.Select(c => new EventStatusHistoryEntry
+            {
+                EventId = c.Event.Id,
+                EventEndDate = c.Event.EndDate,
+                OldStatus = c.OldStatus,
+                NewStatus = c.NewStatus,
+                ChangedAt = now
+            }).ToList();
+            await _observers.HistoryRepository.AppendAsync(entries, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to write status history");
+        }
+    }
+
+    private async Task CleanupExpiredHistoryAsync(CancellationToken ct)
+    {
+        try
+        {
+            var cutoff = DateTimeOffset.UtcNow.AddMonths(-1);
+            await _observers.HistoryRepository.DeleteExpiredAsync(cutoff, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to cleanup expired status history");
         }
     }
 
@@ -152,21 +198,15 @@ public sealed class EventRefreshBackgroundService : BackgroundService
         await _observers.Notifier.NotifyNewEventsAsync(newEvents, ct);
     }
 
-    private async Task NotifyStatusChangesAsync(
-        IReadOnlyList<RiftboundEvent> current,
-        IReadOnlyDictionary<string, RegistrationStatus> previousStates,
-        CancellationToken ct)
+    private async Task NotifyStatusChangesAsync(IReadOnlyList<StatusChange> allChanges, CancellationToken ct)
     {
-        var changes = current
-            .Where(e => previousStates.TryGetValue(e.Id, out var prev)
-                        && prev != e.Stats.GetRegistrationStatus()
-                        && e.Stats.GetRegistrationStatus() == RegistrationStatus.Open)
-            .Select(e => new StatusChange(e, previousStates[e.Id], e.Stats.GetRegistrationStatus()))
+        var openChanges = allChanges
+            .Where(c => c.NewStatus == RegistrationStatus.Open)
             .ToList();
 
-        if (changes.Count == 0) return;
+        if (openChanges.Count == 0) return;
 
-        _logger.LogInformation("Notifying {Count} status change(s) via Discord", changes.Count);
-        await _observers.Notifier.NotifyStatusChangedAsync(changes, ct);
+        _logger.LogInformation("Notifying {Count} status change(s) via Discord", openChanges.Count);
+        await _observers.Notifier.NotifyStatusChangedAsync(openChanges, ct);
     }
 }

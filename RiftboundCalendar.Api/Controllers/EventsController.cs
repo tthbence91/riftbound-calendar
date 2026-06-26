@@ -29,6 +29,16 @@ public sealed class EventsController : ControllerBase
         return Ok(events.Select(RiftboundEventDto.FromDomain).ToList());
     }
 
+    [HttpGet("{id}/history")]
+    public async Task<ActionResult<IReadOnlyList<StatusHistoryEntryDto>>> GetEventHistory(
+        string id,
+        [FromServices] IStatusHistoryRepository historyRepository,
+        CancellationToken cancellationToken)
+    {
+        var entries = await historyRepository.GetByEventIdAsync(id, cancellationToken);
+        return Ok(entries.Select(StatusHistoryEntryDto.FromDomain).ToList());
+    }
+
     private async Task WaitForStartupAsync(CancellationToken requestCancelled)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(requestCancelled);

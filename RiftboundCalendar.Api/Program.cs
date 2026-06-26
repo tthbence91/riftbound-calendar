@@ -19,6 +19,7 @@ builder.Services.AddSingleton<IEventNotifier, DiscordNotifier>();
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContextFactory<RiftboundDbContext>(o => o.UseNpgsql(connectionString));
 builder.Services.AddSingleton<INotificationStateRepository, NotificationStateRepository>();
+builder.Services.AddSingleton<IStatusHistoryRepository, StatusHistoryRepository>();
 
 var allowedOrigins = builder.Configuration
     .GetSection("AllowedOrigins").Get<string[]>() ?? [];
