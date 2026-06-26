@@ -206,6 +206,92 @@ public class EventRefreshBackgroundServiceTests : IDisposable
         requestCount.Should().Be(0);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_WhenStatusChangesToFull_DoesNotNotify()
+    {
+        var requestCount = 0;
+        var observers = CreateCapturingObservers(() => requestCount++);
+
+        var nearBudapest = new EventLocation("Test", 47.4600, 18.9283);
+        var openEvent = new RiftboundEvent("evt1", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(4),
+            nearBudapest, new EventInfo("Test", "Constructed", new Uri("https://example.com")))
+            { Stats = new EventStats { LifecycleStatus = "REGISTRATION_OPEN", Capacity = 32, RegisteredCount = 10 } };
+        var fullEvent = new RiftboundEvent("evt1", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(4),
+            nearBudapest, new EventInfo("Test", "Constructed", new Uri("https://example.com")))
+            { Stats = new EventStats { LifecycleStatus = "REGISTRATION_OPEN", Capacity = 32, RegisteredCount = 32 } };
+
+        var callCount = 0;
+        var secondCycleTcs = new TaskCompletionSource();
+        _mockFetcher
+            .Setup(f => f.FetchAllEventsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => { callCount++; return callCount == 1 ? [openEvent] : [fullEvent]; })
+            .Callback(() => { if (callCount >= 2) secondCycleTcs.TrySetResult(); });
+
+        using var sut = CreateSutWithObservers(observers, refreshIntervalMinutes: 0);
+        using var cts = new CancellationTokenSource();
+        await sut.StartAsync(cts.Token);
+        await secondCycleTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(100);
+        await cts.CancelAsync();
+        await sut.StopAsync(CancellationToken.None);
+
+        requestCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenStatusChangesToClosed_DoesNotNotify()
+    {
+        var requestCount = 0;
+        var observers = CreateCapturingObservers(() => requestCount++);
+
+        var nearBudapest = new EventLocation("Test", 47.4600, 18.9283);
+        var openEvent = new RiftboundEvent("evt1", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(4),
+            nearBudapest, new EventInfo("Test", "Constructed", new Uri("https://example.com")))
+            { Stats = new EventStats { LifecycleStatus = "REGISTRATION_OPEN" } };
+        var closedEvent = new RiftboundEvent("evt1", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(4),
+            nearBudapest, new EventInfo("Test", "Constructed", new Uri("https://example.com")))
+            { Stats = new EventStats { LifecycleStatus = "REGISTRATION_CLOSED" } };
+
+        var callCount = 0;
+        var secondCycleTcs = new TaskCompletionSource();
+        _mockFetcher
+            .Setup(f => f.FetchAllEventsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => { callCount++; return callCount == 1 ? [openEvent] : [closedEvent]; })
+            .Callback(() => { if (callCount >= 2) secondCycleTcs.TrySetResult(); });
+
+        using var sut = CreateSutWithObservers(observers, refreshIntervalMinutes: 0);
+        using var cts = new CancellationTokenSource();
+        await sut.StartAsync(cts.Token);
+        await secondCycleTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(100);
+        await cts.CancelAsync();
+        await sut.StopAsync(CancellationToken.None);
+
+        requestCount.Should().Be(0);
+    }
+
+    private static EventRefreshObservers CreateCapturingObservers(Action onRequest)
+    {
+        var handler = new CapturingHandler(onRequest);
+        var factory = new Mock<IHttpClientFactory>();
+        factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(() => new HttpClient(handler));
+        var notifier = new DiscordNotifier(
+            factory.Object,
+            Options.Create(new DiscordOptions { WebhookUrl = "https://discord.com/api/webhooks/test" }),
+            NullLogger<DiscordNotifier>.Instance);
+        return new EventRefreshObservers(new StartupReadiness(), notifier);
+    }
+
+    private EventRefreshBackgroundService CreateSutWithObservers(
+        EventRefreshObservers observers, int refreshIntervalMinutes = 60) =>
+        new(_mockFetcher.Object, _cacheRepo, observers,
+            Options.Create(new RiftboundOptions
+            {
+                RefreshIntervalMinutes = refreshIntervalMinutes,
+                BudapestLatitude = 47.4979, BudapestLongitude = 19.0402, RadiusKm = 50.0
+            }),
+            NullLogger<EventRefreshBackgroundService>.Instance);
+
     private static RiftboundEvent CreateEvent(string id, double lat, double lng) =>
         new(id, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(2),
             new EventLocation("Test", lat, lng),

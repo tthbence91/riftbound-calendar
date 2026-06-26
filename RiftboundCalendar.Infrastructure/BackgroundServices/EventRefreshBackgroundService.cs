@@ -131,7 +131,8 @@ public sealed class EventRefreshBackgroundService : BackgroundService
     {
         var changes = current
             .Where(e => previousStatuses.TryGetValue(e.Id, out var prev)
-                        && prev != e.Stats.GetRegistrationStatus())
+                        && prev != e.Stats.GetRegistrationStatus()
+                        && e.Stats.GetRegistrationStatus() == RegistrationStatus.Open)
             .Select(e => new StatusChange(e, previousStatuses[e.Id], e.Stats.GetRegistrationStatus()))
             .ToList();
 
