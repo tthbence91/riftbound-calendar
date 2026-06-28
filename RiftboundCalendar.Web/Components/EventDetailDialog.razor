@@ -42,14 +42,27 @@
                     loading="lazy" />
             <MudDivider Class="mt-2" />
             <MudText Typo="Typo.subtitle2" Class="mt-2 mb-1">Státusz változások</MudText>
-            @if (_history.Count == 0)
+            @{
+                var initialEntry = _history.FirstOrDefault(e => e.OldStatus == e.NewStatus);
+                var transitions  = _history.Where(e => e.OldStatus != e.NewStatus).ToList();
+            }
+            @if (initialEntry is not null)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Secondary" />
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Először észlelve: @initialEntry.ChangedAt.LocalDateTime.ToString("yyyy. MM. dd. HH:mm")
+                    </MudText>
+                </MudStack>
+            }
+            @if (transitions.Count == 0)
             {
                 <MudText Typo="Typo.body2" Color="Color.Secondary">Még nem változott a státusz.</MudText>
             }
             else
             {
                 <MudStack Spacing="1">
-                    @foreach (var entry in _history)
+                    @foreach (var entry in transitions)
                     {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" Color="Color.Secondary" />

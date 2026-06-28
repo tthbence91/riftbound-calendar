@@ -231,6 +231,54 @@ public class EventRefreshBackgroundServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ExecuteAsync_WhenEventFirstSeen_WritesInitialHistoryEntryWithSameOldAndNewStatus()
+    {
+        var nearBudapest = new EventLocation("Test", 47.4600, 18.9283);
+        var evt = MakeEvent("evt1", nearBudapest, new EventStats { LifecycleStatus = "REGISTRATION_CLOSED" });
+
+        var fetched = new TaskCompletionSource();
+        _mockFetcher
+            .Setup(f => f.FetchAllEventsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([evt])
+            .Callback(fetched.SetResult);
+
+        using var cts = new CancellationTokenSource();
+        using var sut = CreateSut();
+
+        await sut.StartAsync(cts.Token);
+        await fetched.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(50);
+        await cts.CancelAsync();
+        await sut.StopAsync(CancellationToken.None);
+
+        _mockHistoryRepo.Verify(r => r.AppendAsync(
+            It.Is<IReadOnlyList<EventStatusHistoryEntry>>(e =>
+                e.Any(entry => entry.EventId == "evt1" && entry.OldStatus == entry.NewStatus)),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenEventAlreadyKnown_DoesNotWriteInitialHistoryEntryAgain()
+    {
+        var nearBudapest = new EventLocation("Test", 47.4600, 18.9283);
+        var evt = MakeEvent("evt1", nearBudapest, new EventStats { LifecycleStatus = "REGISTRATION_CLOSED" });
+
+        var (sut, secondCycleTcs) = CreateTwoCycleSutFromEvents(evt, evt);
+
+        using var cts = new CancellationTokenSource();
+        await sut.StartAsync(cts.Token);
+        await secondCycleTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(100);
+        await cts.CancelAsync();
+        await sut.StopAsync(CancellationToken.None);
+
+        _mockHistoryRepo.Verify(r => r.AppendAsync(
+            It.Is<IReadOnlyList<EventStatusHistoryEntry>>(e =>
+                e.Any(entry => entry.OldStatus == entry.NewStatus)),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WhenStatusChanges_WritesHistoryEntry()
     {
         var (sut, secondCycleTcs) = CreateTwoCycleSut(

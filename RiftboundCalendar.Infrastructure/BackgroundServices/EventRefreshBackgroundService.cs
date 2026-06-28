@@ -79,6 +79,7 @@ public sealed class EventRefreshBackgroundService : BackgroundService
 
             if (filtered.Count > 0)
             {
+                await WriteInitialHistoryAsync(filtered, _previousStates!, stoppingToken);
                 if (_previousStates!.Count > 0)
                 {
                     await NotifyNewEventsAsync(filtered, _previousStates, stoppingToken);
@@ -148,6 +149,36 @@ public sealed class EventRefreshBackgroundService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to save notification state to DB");
+        }
+    }
+
+    private async Task WriteInitialHistoryAsync(
+        IReadOnlyList<RiftboundEvent> current,
+        IReadOnlyDictionary<string, RegistrationStatus> previousStates,
+        CancellationToken ct)
+    {
+        var newEvents = current.Where(e => !previousStates.ContainsKey(e.Id)).ToList();
+        if (newEvents.Count == 0) return;
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var entries = newEvents.Select(e =>
+            {
+                var status = e.Stats.GetRegistrationStatus();
+                return new EventStatusHistoryEntry
+                {
+                    EventId = e.Id,
+                    EventEndDate = e.EndDate,
+                    OldStatus = status,
+                    NewStatus = status,
+                    ChangedAt = now
+                };
+            }).ToList();
+            await _observers.HistoryRepository.AppendAsync(entries, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to write initial status history");
         }
     }
 
