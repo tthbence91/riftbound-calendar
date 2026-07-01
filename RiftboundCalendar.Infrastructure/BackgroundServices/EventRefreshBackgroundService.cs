@@ -79,7 +79,7 @@ public sealed class EventRefreshBackgroundService : BackgroundService
 
             if (filtered.Count > 0)
             {
-                await WriteInitialHistoryAsync(filtered, _previousStates!, stoppingToken);
+                var previousStatesSnapshot = _previousStates!;
                 if (_previousStates!.Count > 0)
                 {
                     await NotifyNewEventsAsync(filtered, _previousStates, stoppingToken);
@@ -94,6 +94,10 @@ public sealed class EventRefreshBackgroundService : BackgroundService
 
                 _cache.UpdateCache(filtered);
                 _startupRetries = 0;
+
+                // Fire-and-forget: must not block cache population or the readiness signal
+                _ = WriteInitialHistoryAsync(filtered, previousStatesSnapshot, stoppingToken);
+
                 return false;
             }
 
